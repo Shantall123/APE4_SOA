@@ -11,7 +11,7 @@
 .env.*
 !.env.example
 !**/.env.example
-
+*.docx
 # application.properties de los proyectos Java contienen claves y
 # contraseñas reales: se versiona en su lugar application-example.properties
 **/src/main/resources/application.properties
