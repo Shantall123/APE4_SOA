@@ -7,7 +7,7 @@ namespace ConsultaVehiculosWinForms;
 public partial class FormPrincipal : Form
 {
 
-    private const string UrlJava = "http://localhost:8081/";
+    private const string UrlJava = "http://localhost:8090/";
     private static readonly HttpClient ClienteHttp = new()
     {
         BaseAddress = new Uri(UrlJava),

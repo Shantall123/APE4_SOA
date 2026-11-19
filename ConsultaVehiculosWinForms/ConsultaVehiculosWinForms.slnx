@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="ConsultaVehiculosWinForms/ConsultaVehiculosWinForms.csproj" />
+  <Project Path="WinFormsAdministrativo/WinFormsAdministrativo.csproj" Id="55a89b3b-d49d-4fd5-a016-a6e2903066ee" />
 </Solution>
