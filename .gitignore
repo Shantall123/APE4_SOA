@@ -1,0 +1,137 @@
+# =====================================================================
+# .gitignore general - APE 04 (arquitectura multicanal de vehículos)
+# Excluye dependencias descargadas, compilaciones, entornos virtuales,
+# configuraciones locales con secretos y archivos temporales.
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# Secretos y configuración local (publicar solo plantillas *.example)
+# ---------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# application.properties de los proyectos Java contienen claves y
+# contraseñas reales: se versiona en su lugar application-example.properties
+**/src/main/resources/application.properties
+**/src/main/resources/application-*.properties
+!**/src/main/resources/application-example.properties
+*.local.properties
+
+# ---------------------------------------------------------------------
+# Java / Maven (API de vehículos, notificaciones, JavaFX)
+# ---------------------------------------------------------------------
+target/
+*.class
+*.jar
+*.war
+*.ear
+!.mvn/wrapper/maven-wrapper.jar
+!**/.mvn/wrapper/maven-wrapper.jar
+hs_err_pid*.log
+replay_pid*.log
+.classpath
+.project
+.settings/
+.factorypath
+.apt_generated/
+.sts4-cache/
+.springBeans
+
+# ---------------------------------------------------------------------
+# C# / .NET (Windows Forms)
+# ---------------------------------------------------------------------
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ll]og/
+*.nupkg
+packages/
+
+# ---------------------------------------------------------------------
+# Node.js / React (Vite) / PWA
+# ---------------------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.eslintcache
+
+# ---------------------------------------------------------------------
+# Python / FastAPI
+# ---------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------------------------------------------------------------------
+# NGINX y RabbitMQ (solo se versiona la configuración, no los runtime)
+# ---------------------------------------------------------------------
+logs/
+*.log
+temp/
+*.pid
+
+# ---------------------------------------------------------------------
+# Editores e IDE
+# ---------------------------------------------------------------------
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# Herramienta de modernización/actualización de Java (archivos generados)
+.github/modernize/
+**/.github/modernize/
+
+# ---------------------------------------------------------------------
+# Sistema operativo y temporales
+# ---------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+$RECYCLE.BIN/
+*.tmp
+*.temp
+*.bak
+*.cache
+
+# Archivos de bloqueo de Office (documento abierto en Word)
+~$*
+
+# ---------------------------------------------------------------------
+# Bases de datos locales y volcados con datos personales
+# ---------------------------------------------------------------------
+*.sqlite
+*.sqlite3
+*.db
+*.dump

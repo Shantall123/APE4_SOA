@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+	  <!-- Activa el soporte de controles Windows Forms. -->
+	  <UseWindowsForms>true</UseWindowsForms>
+	  <!-- Habilita directivas using implícitas. -->
+	  <ImplicitUsings>enable</ImplicitUsings>
+	  <!-- Activa las comprobaciones de tipos anulables. -->
+	  <Nullable>enable</Nullable>
+	  <!-- Mejora el escalado en pantallas de alta resolución. -->
+	  <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+</Project>
