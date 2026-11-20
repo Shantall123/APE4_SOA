@@ -1,81 +1,83 @@
-# Cliente web React – Consulta de vehículos (Vite + Fetch)
+# Plataforma web de consulta – React + Fetch
 
-Aplicación web en React que consulta `GET /api/vehiculos` de la API Java mediante Fetch. Permite:
+Cliente web de **solo consulta** construido con React 19 y Vite 8. Usa Fetch y pasa siempre por NGINX:
 
-- Filtrar por marca, en el navegador.
-- Ver el detalle de un vehículo al seleccionar su ID.
-- Ver el código HTTP de cada consulta.
-- Manejar los estados de carga, listado vacío, errores HTTP (401, 403, 404, 500, 502, 503) y fallos de red.
+- **Inicio de sesión** con usuario y contraseña (`POST /oauth/token`). El JWT no se pega a mano.
+- **Vehículos**: listado (`GET /api/vehiculos`), filtro por **marca** y estado aplicado por la API (`?marca=&estado=`), indicadores del catálogo (total, disponibles, reservados y vendidos) y **detalle** (`GET /api/vehiculos/{id}`).
+- **Ventas** (roles OPERADOR y ADMIN): listado paginado (`GET /api/ventas`), filtro por estado, **resumen** con datos reales (`GET /api/ventas/resumen`) y detalle (`GET /api/ventas/{id}`).
+- **Estados de la interfaz**: carga, listado vacío, errores HTTP (400, 401, 403, 404, 422, 500, 502, 503, 504), fallos de conexión y tiempo agotado.
+- **No registra ventas**: no hay formularios de venta ni `POST /api/ventas`, y el proxy rechaza cualquier método distinto de GET hacia `/api` con un 404.
 
-El JWT se pega en la interfaz y se mantiene solo en memoria, sin `localStorage`.
+## Arquitectura
 
-> La guía APE 04 prevé añadir la consulta de ventas (`GET /api/ventas`) y un resumen de indicadores. Esa parte todavía no está implementada. Este cliente no debe registrar ventas.
+```text
+Navegador (React) ──► Vite :5173 (proxy) ──► NGINX :8090 ──► API Java (8080/8083) / FastAPI (8000)
+```
+
+- El navegador solo usa rutas relativas (`/oauth/token` y `/api/...`): no necesita CORS ni conoce URL internas.
+- Las credenciales del **cliente OAuth** se leen de `.env.local`, sin el prefijo `VITE_`, así que Vite **no las incluye** en el código del navegador. El proxy las agrega como `Authorization: Basic` solo en `POST /oauth/token` y devuelve únicamente el `access_token`, sin el `refresh_token`.
+- El JWT se guarda en `sessionStorage` solo durante la sesión. Se borra al cerrar sesión (con confirmación), al vencer o ante un HTTP 401.
+
+## Permisos por rol
+
+| Rol | Módulos |
+|---|---|
+| ADMIN, OPERADOR | Vehículos y Ventas |
+| CONSULTA | Solo Vehículos |
 
 ## Requisitos
 
 | Software | Versión |
 |---|---|
 | Node.js | 20.19+ o 22.12+ (exigido por Vite 8; probado con 22.16) |
-| npm | 10 o superior |
-| API Java de vehículos | En ejecución en `http://127.0.0.1:8081` |
+| NGINX | En 8090, con las rutas de la Actividad 3 |
+| API Java, FastAPI y MySQL | En ejecución |
 
-Dependencias: React 19, Vite 8, `@vitejs/plugin-react` y oxlint.
-
-## 1. Instalación
+## 1. Instalación y configuración
 
 ```powershell
 cd AplicacionWebREACT\react-fetch-vehiculos
 npm install
 ```
 
-La carpeta `node_modules` no se sube a Git; se recrea con `npm install`.
+Copia `.env.example` como `.env.local`. El archivo `*.local` está excluido de Git.
 
-## 2. Configuración
-
-En `vite.config.js`, el servidor de desarrollo usa el puerto **5173** y reenvía todas las rutas `/api` a la API Java. Así se evitan problemas de CORS y el navegador no necesita conocer la URL interna:
-
-```js
-proxy: {
-  '/api': { target: 'http://127.0.0.1:8081', changeOrigin: true },
-},
+```dotenv
+API_BASE_URL=http://127.0.0.1:8090
+OAUTH_CLIENT_ID=vehiculos-client
+OAUTH_CLIENT_SECRET=<app.security.client-secret de la API Java>
 ```
 
-Para pasar por NGINX, cambia `target` a `http://127.0.0.1:8090`.
-
-## 3. Ejecución en desarrollo
+## 2. Ejecución
 
 ```powershell
-npm run dev
+npm run dev        # http://localhost:5173
 ```
 
-Abre `http://localhost:5173`. Como `strictPort` está activado, si el 5173 está ocupado (por ejemplo, por la PWA) Vite se detiene en lugar de buscar otro puerto.
-
-## 4. Compilación
+## 3. Compilación y calidad
 
 ```powershell
 npm run build      # genera dist/
-npm run preview    # sirve dist/ en http://localhost:4173
-npm run lint       # análisis estático con oxlint
+npm run preview    # sirve dist/ en http://localhost:4173 con el mismo proxy
+npm run lint       # oxlint
 ```
-
-> `npm run preview` no tiene el proxy `/api` configurado. Para consultar la API usa `npm run dev` o publica `dist/` detrás de NGINX.
-
-## 5. Uso
-
-1. Obtén un JWT con `POST http://127.0.0.1:8081/oauth/token` desde Postman.
-2. Pégalo en **Token JWT**, sin escribir `Bearer`.
-3. Pulsa **Consultar vehículos**.
-4. Escribe una marca en **Filtrar por marca** y pulsa el ID de una fila para ver su detalle.
-5. Si dejas el token vacío, la API responde 401 y el mensaje aparece en pantalla.
 
 ## Estructura
 
 ```text
-index.html
-vite.config.js        Puerto 5173 y proxy /api
+vite.config.js            Proxy a NGINX: login con credenciales del cliente y solo GET hacia /api
+.env.example              Plantilla de configuración (sin secretos)
 src/
-  main.jsx            Montaje de React
-  App.jsx             Interfaz: token, catálogo, filtro y detalle
-  App.css, index.css  Estilos
-  api/vehiculosApi.js Cliente Fetch: JWT, códigos HTTP y validación del JSON
+  App.jsx                 Sesión, barra de usuario/rol, pestañas según el rol
+  components/
+    Login.jsx             Inicio de sesión
+    Vehiculos.jsx         Catálogo, filtro por marca/estado, indicadores y detalle
+    Ventas.jsx            Ventas paginadas, filtro, resumen y detalle (solo lectura)
+    Estado.jsx            Mensaje de estado con el código HTTP real
+  api/
+    http.js               Fetch común: JWT, tiempo límite, ErrorApi y mensajes por código
+    authApi.js            Login, identidad y sesión
+    vehiculosApi.js       GET /api/vehiculos y /api/vehiculos/{id}
+    ventasApi.js          GET /api/ventas, /resumen y /{id} (sin POST)
+  utils/formato.js        Formato de moneda, fecha y estados
 ```
