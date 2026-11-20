@@ -1,37 +1,46 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { listarVehiculos, obtenerVehiculo } from '../api/vehiculosApi.js';
 import { mostrarPrecio, texto, claseEstado } from '../utils/formato.js';
 import Estado from './Estado.jsx';
+import Paginacion from './Paginacion.jsx';
 
 const ESTADOS = ['', 'DISPONIBLE', 'RESERVADO', 'VENDIDO'];
+const POR_PAGINA = 10;
+const ESPERA_ESCRITURA_MS = 350; // evita una petición por cada tecla
 
 /**
- * Catálogo: GET /api/vehiculos con filtro por marca y estado (lo aplica la API),
- * indicadores calculados con los datos recibidos y detalle con GET /api/vehiculos/{id}.
+ * Catálogo: GET /api/vehiculos con búsqueda dinámica por marca y estado
+ * (filtros aplicados por la API), paginación, indicadores y detalle con
+ * GET /api/vehiculos/{id} al pulsar cualquier parte de la fila.
  */
 export default function Vehiculos({ token, alVencerSesion }) {
   const [marca, setMarca] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState('');
+  const [recarga, setRecarga] = useState(0);
   const [filtrosAplicados, setFiltrosAplicados] = useState({ marca: '', estado: '' });
   const [vehiculos, setVehiculos] = useState([]);
-  // El estado inicial ya representa la primera carga en curso.
+  const [pagina, setPagina] = useState(1);
   const [cargando, setCargando] = useState(true);
   const [estado, setEstado] = useState({ mensaje: 'Consultando la API de vehículos…', tipo: 'info' });
   const [detalle, setDetalle] = useState(null);
   const [estadoDetalle, setEstadoDetalle] = useState(null);
+  const refDetalle = useRef(null);
 
   /** Aplica a la interfaz el resultado (o el error) de una consulta ya terminada. */
   const aplicar = useCallback(({ filtros, r, error }) => {
     setCargando(false);
+    setPagina(1);
     if (error) {
       if (error.codigoHttp === 401) { alVencerSesion(); return; }
+      setVehiculos([]); // nunca se muestran datos anteriores como si fueran actuales
       setEstado({ mensaje: error.message, tipo: 'error', codigoHttp: error.codigoHttp });
       return;
     }
     setVehiculos(r.vehiculos);
     setFiltrosAplicados(filtros);
+    const partes = [filtros.marca && `marca "${filtros.marca}"`, filtros.estado && `estado ${filtros.estado}`].filter(Boolean);
     setEstado({
-      mensaje: `Consulta correcta: ${r.vehiculos.length} vehículo(s)${filtros.marca ? ` de la marca "${filtros.marca}"` : ''}.`,
+      mensaje: `Consulta correcta: ${r.vehiculos.length} vehículo(s)${partes.length ? ` con ${partes.join(' y ')}` : ''}.`,
       tipo: 'ok', codigoHttp: r.codigoHttp,
     });
   }, [alVencerSesion]);
@@ -40,38 +49,30 @@ export default function Vehiculos({ token, alVencerSesion }) {
   const pedir = useCallback((filtros) =>
     listarVehiculos(token, filtros).then((r) => ({ filtros, r }), (error) => ({ filtros, error })), [token]);
 
-  const consultar = (filtros) => pedir(filtros).then(aplicar);
-
-  // Primera carga del catálogo completo (se descarta si el componente se desmonta).
+  /**
+   * Búsqueda dinámica: se consulta al escribir o al cambiar el estado.
+   * Se espera a que el usuario deje de escribir y se descartan las respuestas
+   * de búsquedas anteriores (evita resultados desordenados).
+   */
   useEffect(() => {
     let vigente = true;
-    pedir({ marca: '', estado: '' }).then((res) => { if (vigente) aplicar(res); });
-    return () => { vigente = false; };
-  }, [pedir, aplicar]);
-
-  /** Prepara la interfaz para una nueva consulta (desde un evento del usuario). */
-  function nuevaConsulta(filtros) {
-    setCargando(true);
-    setDetalle(null);
-    setEstadoDetalle(null);
-    setEstado({ mensaje: 'Consultando la API de vehículos…', tipo: 'info' });
-    setVehiculos([]); // evita confundir una consulta fallida con datos anteriores
-    consultar(filtros);
-  }
-
-  function buscar(evento) {
-    evento.preventDefault();
-    nuevaConsulta({ marca, estado: estadoFiltro });
-  }
+    const filtros = { marca: marca.trim(), estado: estadoFiltro };
+    const temporizador = setTimeout(() => {
+      setCargando(true);
+      setEstado({ mensaje: 'Consultando la API de vehículos…', tipo: 'info' });
+      pedir(filtros).then((res) => { if (vigente) aplicar(res); });
+    }, filtros.marca ? ESPERA_ESCRITURA_MS : 0);
+    return () => { vigente = false; clearTimeout(temporizador); };
+  }, [marca, estadoFiltro, recarga, pedir, aplicar]);
 
   function limpiar() {
     setMarca('');
     setEstadoFiltro('');
-    nuevaConsulta({ marca: '', estado: '' });
   }
 
   async function verDetalle(id) {
     setEstadoDetalle({ mensaje: `Consultando GET /api/vehiculos/${id}…`, tipo: 'info' });
+    refDetalle.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
       const r = await obtenerVehiculo(token, id);
       setDetalle(r.vehiculo);
@@ -83,7 +84,17 @@ export default function Vehiculos({ token, alVencerSesion }) {
     }
   }
 
+  /** Enter o espacio sobre una fila enfocada también abre el detalle (teclado). */
+  function teclaFila(evento, id) {
+    if (evento.key === 'Enter' || evento.key === ' ') {
+      evento.preventDefault();
+      verDetalle(id);
+    }
+  }
+
   const contar = (e) => vehiculos.filter((v) => v.estado === e).length;
+  const paginas = Math.max(1, Math.ceil(vehiculos.length / POR_PAGINA));
+  const visibles = vehiculos.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   return (
     <>
@@ -92,7 +103,8 @@ export default function Vehiculos({ token, alVencerSesion }) {
           <div>
             <h2 id="titulo-catalogo">Catálogo de vehículos</h2>
             <p className="ayuda">
-              Datos reales de <code>GET /api/vehiculos</code>. El filtro por marca y estado lo aplica la API.
+              Datos reales de <code>GET /api/vehiculos</code>. La búsqueda se actualiza mientras escribe;
+              el filtro por marca y estado lo aplica la API.
             </p>
           </div>
           <span className="contador">{vehiculos.length} resultado(s)</span>
@@ -105,28 +117,30 @@ export default function Vehiculos({ token, alVencerSesion }) {
           <div className="indicador mal"><span>Vendidos</span><strong>{contar('VENDIDO')}</strong></div>
         </div>
 
-        <form className="filtros" onSubmit={buscar}>
+        <div className="filtros">
           <div>
             <label htmlFor="filtroMarca">Marca</label>
-            <input id="filtroMarca" type="search" placeholder="Ejemplo: Toyota" value={marca}
-              onChange={(e) => setMarca(e.target.value)} disabled={cargando} />
+            <input id="filtroMarca" type="search" placeholder="Escriba una marca, p. ej. Toyota" value={marca}
+              autoComplete="off" onChange={(e) => setMarca(e.target.value)} />
           </div>
           <div>
             <label htmlFor="filtroEstado">Estado</label>
-            <select id="filtroEstado" value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)} disabled={cargando}>
+            <select id="filtroEstado" value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
               {ESTADOS.map((e) => <option key={e} value={e}>{e || 'Todos'}</option>)}
             </select>
           </div>
           <div className="acciones">
-            <button type="submit" disabled={cargando}>{cargando ? 'Consultando…' : 'Buscar'}</button>
-            <button type="button" className="secundario" onClick={limpiar} disabled={cargando}>Ver todos</button>
+            <button type="button" className="secundario" onClick={limpiar}
+              disabled={!marca && !estadoFiltro}>Limpiar filtros</button>
+            <button type="button" className="secundario" onClick={() => setRecarga((n) => n + 1)}
+              disabled={cargando}>↻ Actualizar</button>
           </div>
-        </form>
+        </div>
 
         <Estado {...estado} />
 
         <div className="tabla-scroll">
-          <table>
+          <table className={cargando ? 'actualizando' : undefined}>
             <thead>
               <tr>
                 <th scope="col">ID</th><th scope="col">Marca</th><th scope="col">Modelo</th>
@@ -134,14 +148,12 @@ export default function Vehiculos({ token, alVencerSesion }) {
               </tr>
             </thead>
             <tbody>
-              {vehiculos.map((v) => (
-                <tr key={v.idVehiculo} className={detalle?.idVehiculo === v.idVehiculo ? 'fila-activa' : undefined}>
-                  <td>
-                    <button className="enlace-id" type="button" onClick={() => verDetalle(v.idVehiculo)}
-                      aria-label={`Ver detalle del vehículo ${v.idVehiculo}`}>
-                      {v.idVehiculo}
-                    </button>
-                  </td>
+              {visibles.map((v) => (
+                <tr key={v.idVehiculo} tabIndex={0}
+                  className={`fila-clic${detalle?.idVehiculo === v.idVehiculo ? ' fila-activa' : ''}`}
+                  onClick={() => verDetalle(v.idVehiculo)} onKeyDown={(e) => teclaFila(e, v.idVehiculo)}
+                  aria-label={`Ver detalle del vehículo ${v.idVehiculo}: ${v.marca} ${v.modelo}`}>
+                  <td><strong>{v.idVehiculo}</strong></td>
                   <td>{texto(v.marca)}</td>
                   <td>{texto(v.modelo)}</td>
                   <td>{texto(v.placa)}</td>
@@ -166,9 +178,14 @@ export default function Vehiculos({ token, alVencerSesion }) {
             </tbody>
           </table>
         </div>
+
+        {vehiculos.length > 0 && (
+          <Paginacion pagina={pagina} paginas={paginas} total={vehiculos.length}
+            porPagina={POR_PAGINA} alCambiar={setPagina} />
+        )}
       </section>
 
-      <section className="panel" aria-labelledby="titulo-detalle">
+      <section className="panel" aria-labelledby="titulo-detalle" ref={refDetalle}>
         <h2 id="titulo-detalle">Detalle del vehículo</h2>
         {estadoDetalle && <Estado {...estadoDetalle} />}
         {detalle ? (
@@ -184,7 +201,7 @@ export default function Vehiculos({ token, alVencerSesion }) {
             <div><dt>Estado</dt><dd><span className={`insignia ${claseEstado(detalle.estado)}`}>{texto(detalle.estado)}</span></dd></div>
           </dl>
         ) : (
-          !estadoDetalle && <p className="ayuda">Seleccione el ID de una fila para consultar su detalle.</p>
+          !estadoDetalle && <p className="ayuda">Pulse cualquier fila del catálogo para consultar el detalle del vehículo.</p>
         )}
       </section>
     </>

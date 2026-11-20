@@ -101,3 +101,12 @@ td.numero { text-align: right; white-space: nowrap; }
   .linea input { flex-basis: 100%; }
   .estado { flex-direction: column; align-items: flex-start; }
 }
+
+/* Filas clicables: toda la fila abre el detalle */
+tr.fila-clic { cursor: pointer; }
+tr.fila-clic:hover td { background: #f3f7fc; }
+tr.fila-clic:focus-visible { outline: 3px solid #e4a529; outline-offset: -3px; }
+tr.fila-clic.fila-activa td { background: #fff6e3; }
+/* Mientras llega la búsqueda dinámica se atenúa la tabla sin vaciarla */
+table.actualizando tbody { opacity: .55; transition: opacity .15s; }
+.paginacion strong { color: #19324d; }

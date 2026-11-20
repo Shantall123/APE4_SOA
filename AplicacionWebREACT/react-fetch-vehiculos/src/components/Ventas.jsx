@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { listarVentas, resumenVentas, consultarVenta } from '../api/ventasApi.js';
 import { mostrarPrecio, mostrarFecha, texto, claseEstado } from '../utils/formato.js';
 import Estado from './Estado.jsx';
+import Paginacion from './Paginacion.jsx';
 
 const ESTADOS = ['', 'PENDIENTE', 'EN_REVISION', 'COMPLETADA', 'FALLIDA'];
 const POR_PAGINA = 10;
@@ -22,6 +23,7 @@ export default function Ventas({ token, alVencerSesion }) {
   const [estado, setEstado] = useState({ mensaje: 'Consultando la API de ventas…', tipo: 'info' });
   const [detalle, setDetalle] = useState(null);
   const [estadoDetalle, setEstadoDetalle] = useState(null);
+  const refDetalle = useRef(null);
 
   /** Aplica a la interfaz el resultado (o el error) de una consulta ya terminada. */
   const aplicar = useCallback(({ filtro, lista, indicadores, error }) => {
@@ -70,6 +72,7 @@ export default function Ventas({ token, alVencerSesion }) {
 
   async function verDetalle(id) {
     setEstadoDetalle({ mensaje: `Consultando GET /api/ventas/${id}…`, tipo: 'info' });
+    refDetalle.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
       const r = await consultarVenta(token, id);
       setDetalle(r.venta);
@@ -78,6 +81,14 @@ export default function Ventas({ token, alVencerSesion }) {
       if (error.codigoHttp === 401) { alVencerSesion(); return; }
       setDetalle(null);
       setEstadoDetalle({ mensaje: error.message, tipo: 'error', codigoHttp: error.codigoHttp });
+    }
+  }
+
+  /** Enter o espacio sobre una fila enfocada también abre el detalle (teclado). */
+  function teclaFila(evento, id) {
+    if (evento.key === 'Enter' || evento.key === ' ') {
+      evento.preventDefault();
+      verDetalle(id);
     }
   }
 
@@ -110,7 +121,7 @@ export default function Ventas({ token, alVencerSesion }) {
         <div className="filtros">
           <div>
             <label htmlFor="filtroVenta">Estado</label>
-            <select id="filtroVenta" value={estadoFiltro} disabled={cargando}
+            <select id="filtroVenta" value={estadoFiltro}
               onChange={(e) => nuevaConsulta(e.target.value, 0)}>
               {ESTADOS.map((e) => <option key={e} value={e}>{e || 'Todas'}</option>)}
             </select>
@@ -136,11 +147,11 @@ export default function Ventas({ token, alVencerSesion }) {
             </thead>
             <tbody>
               {ventas.map((v) => (
-                <tr key={v.id} className={detalle?.id === v.id ? 'fila-activa' : undefined}>
-                  <td>
-                    <button className="enlace-id" type="button" onClick={() => verDetalle(v.id)}
-                      aria-label={`Ver detalle de la venta ${v.id}`}>{v.id}</button>
-                  </td>
+                <tr key={v.id} tabIndex={0}
+                  className={`fila-clic${detalle?.id === v.id ? ' fila-activa' : ''}`}
+                  onClick={() => verDetalle(v.id)} onKeyDown={(e) => teclaFila(e, v.id)}
+                  aria-label={`Ver detalle de la venta ${v.id}`}>
+                  <td><strong>{v.id}</strong></td>
                   <td>{mostrarFecha(v.fechaUTC)}</td>
                   <td>{texto(v.vehiculoId)}</td>
                   <td>{texto(v.compradorId)}</td>
@@ -164,16 +175,13 @@ export default function Ventas({ token, alVencerSesion }) {
           </table>
         </div>
 
-        <div className="paginacion">
-          <button type="button" className="secundario" disabled={cargando || offset === 0}
-            onClick={() => nuevaConsulta(estadoFiltro, Math.max(0, offset - POR_PAGINA))}>◀ Anterior</button>
-          <span>Página {pagina} de {paginas}</span>
-          <button type="button" className="secundario" disabled={cargando || offset + POR_PAGINA >= total}
-            onClick={() => nuevaConsulta(estadoFiltro, offset + POR_PAGINA)}>Siguiente ▶</button>
-        </div>
+        {total > 0 && (
+          <Paginacion pagina={pagina} paginas={paginas} total={total} porPagina={POR_PAGINA}
+            deshabilitado={cargando} alCambiar={(p) => nuevaConsulta(estadoFiltro, (p - 1) * POR_PAGINA)} />
+        )}
       </section>
 
-      <section className="panel" aria-labelledby="titulo-detalle-venta">
+      <section className="panel" aria-labelledby="titulo-detalle-venta" ref={refDetalle}>
         <h2 id="titulo-detalle-venta">Detalle de la venta</h2>
         {estadoDetalle && <Estado {...estadoDetalle} />}
         {detalle ? (
@@ -188,7 +196,7 @@ export default function Ventas({ token, alVencerSesion }) {
             <div className="ancho"><dt>Operación</dt><dd>{texto(detalle.operacionId)}</dd></div>
           </dl>
         ) : (
-          !estadoDetalle && <p className="ayuda">Seleccione el ID de una venta para consultar su estado actual.</p>
+          !estadoDetalle && <p className="ayuda">Pulse cualquier fila del listado para consultar el estado actual de la venta.</p>
         )}
       </section>
     </>
