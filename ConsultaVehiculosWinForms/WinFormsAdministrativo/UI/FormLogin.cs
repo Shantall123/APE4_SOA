@@ -98,6 +98,10 @@ internal sealed class FormLogin : Form
         _btnSalir.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         _btnIngresar.Click += async (_, _) => await IngresarAsync();
 
+        // Usuario: letras, números, punto, guion y guion bajo (sin espacios).
+        // La contraseña no se restringe: puede contener cualquier carácter.
+        Restricciones.Filtrar(_txtUsuario, Restricciones.CaracterUsuario);
+
         if (mensajeInicial is not null)
         {
             _lblMensaje.ForeColor = Estilo.Aviso;

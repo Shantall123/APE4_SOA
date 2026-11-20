@@ -113,9 +113,11 @@ internal abstract class ModuloBase : UserControl
         var problemas = new List<string>();
         Control? primero = null;
 
+        var marcados = new HashSet<Control>();
         foreach (var (control, invalido, mensaje) in reglas)
         {
-            if (!invalido) continue;
+            // Solo el primer problema de cada campo, para no repetir mensajes.
+            if (!invalido || !marcados.Add(control)) continue;
             Errores.SetError(control, mensaje);
             problemas.Add("•  " + mensaje);
             primero ??= control;

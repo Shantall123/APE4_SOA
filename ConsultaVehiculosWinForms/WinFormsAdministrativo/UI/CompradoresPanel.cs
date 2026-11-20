@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using WinFormsAdministrativo.Models;
 using WinFormsAdministrativo.Services;
 
@@ -20,11 +19,15 @@ internal sealed partial class CompradoresPanel : ModuloBase
     private readonly Label _lblVacio = new();
     private readonly Label _lblTotal = Estilo.Ayuda("");
 
-    [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
-    private static partial Regex CorreoValido();
-
     public CompradoresPanel(ApiClient api, IContextoUi ui) : base(api, ui)
     {
+        // Caracteres permitidos al escribir o pegar
+        Restricciones.Filtrar(_txtDocumento, Restricciones.EsDigito);
+        Restricciones.Filtrar(_txtNombre, Restricciones.CaracterNombre);
+        Restricciones.Filtrar(_txtCorreo, Restricciones.CaracterCorreo);
+        Restricciones.Filtrar(_txtBuscar, Restricciones.CaracterBusqueda);
+        _txtBuscar.MaxLength = 100;
+
         var form = Formulario();
         Campo(form, "Documento (cédula / RUC) *", _txtDocumento, "Máximo 13 caracteres (cédula de 10 o RUC de 13). No se repite para su usuario.");
         Campo(form, "Nombre completo *", _txtNombre);
@@ -106,11 +109,20 @@ internal sealed partial class CompradoresPanel : ModuloBase
     private async Task GuardarAsync()
     {
         string documento = _txtDocumento.Text.Trim();
+        string nombre = Restricciones.Normalizar(_txtNombre.Text);
+        string correo = _txtCorreo.Text.Trim().ToLowerInvariant();
+
         if (!ValidarFormulario(
-                (_txtDocumento, documento.Length < 3, "Documento: es obligatorio y debe tener al menos 3 caracteres."),
-                (_txtDocumento, documento.Length > 13, "Documento: máximo 13 caracteres (cédula de 10 o RUC de 13)."),
-                (_txtNombre, _txtNombre.Text.Trim().Length < 2, "Nombre: es obligatorio y debe tener al menos 2 caracteres."),
-                (_txtCorreo, !CorreoValido().IsMatch(_txtCorreo.Text.Trim()), "Correo: ingrese un correo válido, por ejemplo nombre@dominio.com.")))
+                (_txtDocumento, documento.Length == 0, "Documento: es obligatorio."),
+                (_txtDocumento, !Restricciones.Documento().IsMatch(documento),
+                    $"Documento: solo números, entre 10 y 13 dígitos (tiene {documento.Length})."),
+                (_txtNombre, nombre.Length == 0, "Nombre: es obligatorio."),
+                (_txtNombre, nombre.Length < 3, "Nombre: debe tener al menos 3 letras."),
+                (_txtNombre, !Restricciones.Nombre().IsMatch(nombre),
+                    "Nombre: solo letras (con tildes) y espacios; no puede empezar ni terminar en apóstrofo o guion."),
+                (_txtCorreo, correo.Length == 0, "Correo: es obligatorio."),
+                (_txtCorreo, !Restricciones.Correo().IsMatch(correo),
+                    "Correo: ingrese un correo válido, por ejemplo nombre@dominio.com.")))
         {
             return;
         }
@@ -118,8 +130,8 @@ internal sealed partial class CompradoresPanel : ModuloBase
         var nuevo = new CompradorNuevo
         {
             Documento = documento,
-            Nombre = _txtNombre.Text.Trim(),
-            Correo = _txtCorreo.Text.Trim()
+            Nombre = nombre,
+            Correo = correo
         };
 
         _btnGuardar.Enabled = false;

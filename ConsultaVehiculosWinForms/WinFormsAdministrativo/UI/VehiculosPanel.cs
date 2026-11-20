@@ -96,6 +96,15 @@ internal sealed class VehiculosPanel : ModuloBase
             });
         }
 
+        // ---- Caracteres permitidos al escribir o pegar
+        Restricciones.Filtrar(_txtMarca, Restricciones.CaracterMarca);
+        Restricciones.Filtrar(_txtModelo, Restricciones.CaracterModelo);
+        Restricciones.Filtrar(_txtPlaca, Restricciones.CaracterPlaca);
+        Restricciones.Filtrar(_txtChasis, Restricciones.CaracterChasis);
+        Restricciones.Filtrar(_txtColor, Restricciones.EsLetraOEspacio);
+        Restricciones.Filtrar(_txtFiltroMarca, Restricciones.CaracterMarca);
+        _txtFiltroMarca.MaxLength = 50;
+
         // ---- Eventos
         _txtChasis.TextChanged += (_, _) =>
         {
@@ -164,14 +173,25 @@ internal sealed class VehiculosPanel : ModuloBase
     private async Task GuardarAsync()
     {
         // Validación de forma (ayuda al usuario); las reglas de negocio las aplica la API.
-        int largoChasis = _txtChasis.Text.Trim().Length;
+        string marca = Restricciones.Normalizar(_txtMarca.Text);
+        string modelo = Restricciones.Normalizar(_txtModelo.Text);
+        string placa = _txtPlaca.Text.Trim().ToUpperInvariant();
+        string chasis = _txtChasis.Text.Trim().ToUpperInvariant();
+        string color = Restricciones.Normalizar(_txtColor.Text);
+
         if (!ValidarFormulario(
-                (_txtMarca, string.IsNullOrWhiteSpace(_txtMarca.Text), "Marca: es obligatoria."),
-                (_txtModelo, string.IsNullOrWhiteSpace(_txtModelo.Text), "Modelo: es obligatorio."),
-                (_txtPlaca, string.IsNullOrWhiteSpace(_txtPlaca.Text), "Placa: es obligatoria."),
-                (_txtPlaca, _txtPlaca.Text.Trim().Length > 7, "Placa: máximo 7 caracteres."),
-                (_txtChasis, largoChasis != 17, $"Chasis: debe tener exactamente 17 caracteres (tiene {largoChasis})."),
-                (_txtColor, string.IsNullOrWhiteSpace(_txtColor.Text), "Color: es obligatorio."),
+                (_txtMarca, marca.Length == 0, "Marca: es obligatoria."),
+                (_txtMarca, marca.Length < 2, "Marca: debe tener al menos 2 letras."),
+                (_txtMarca, !Restricciones.Marca().IsMatch(marca), "Marca: solo letras (con tildes), espacios y guion; no puede empezar ni terminar en guion."),
+                (_txtModelo, modelo.Length == 0, "Modelo: es obligatorio."),
+                (_txtModelo, !Restricciones.Modelo().IsMatch(modelo), "Modelo: solo letras, números, espacios, punto o guion; no puede empezar ni terminar en un símbolo."),
+                (_txtPlaca, placa.Length == 0, "Placa: es obligatoria."),
+                (_txtPlaca, !Restricciones.Placa().IsMatch(placa), "Placa: 3 letras seguidas de 3 o 4 números, sin guion (ej.: PBA1234)."),
+                (_txtChasis, chasis.Length != 17, $"Chasis: debe tener exactamente 17 caracteres (tiene {chasis.Length})."),
+                (_txtChasis, !Restricciones.Chasis().IsMatch(chasis), "Chasis: solo letras y números, sin las letras I, O ni Q."),
+                (_txtColor, color.Length == 0, "Color: es obligatorio."),
+                (_txtColor, color.Length < 3, "Color: debe tener al menos 3 letras."),
+                (_txtColor, !Restricciones.Color().IsMatch(color), "Color: solo letras (con tildes) y espacios."),
                 (_numPrecio, _numPrecio.Value <= 0, "Precio: debe ser mayor que 0.")))
         {
             return;
@@ -179,12 +199,12 @@ internal sealed class VehiculosPanel : ModuloBase
 
         var nuevo = new VehiculoNuevo
         {
-            Marca = _txtMarca.Text.Trim(),
-            Modelo = _txtModelo.Text.Trim(),
-            Placa = _txtPlaca.Text.Trim(),
-            Chasis = _txtChasis.Text.Trim(),
+            Marca = marca,
+            Modelo = modelo,
+            Placa = placa,
+            Chasis = chasis,
             Anio = (int)_numAnio.Value,
-            Color = _txtColor.Text.Trim(),
+            Color = color,
             Precio = _numPrecio.Value
         };
 
