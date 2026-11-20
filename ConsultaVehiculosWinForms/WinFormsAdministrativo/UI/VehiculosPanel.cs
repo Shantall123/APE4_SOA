@@ -23,13 +23,16 @@ internal sealed class VehiculosPanel : ModuloBase
     private readonly Button _btnLimpiar = Estilo.Boton("Limpiar");
 
     // Listado
-    private readonly TextBox _txtFiltroMarca = new() { Width = 170, PlaceholderText = "Ej.: Toyota" };
+    private readonly TextBox _txtFiltroMarca = new() { Width = 200, PlaceholderText = "Ej.: Toyota", Anchor = AnchorStyles.Left };
     private readonly ComboBox _cboEstado = Estilo.Lista("Todos", "DISPONIBLE", "RESERVADO", "VENDIDO");
     private readonly Button _btnBuscar = Estilo.Boton("Buscar", principal: true);
     private readonly Button _btnLimpiarFiltro = Estilo.Boton("Ver todos");
     private readonly DataGridView _grilla = Estilo.Grilla();
     private readonly Label _lblVacio = new();
-    private readonly Label _lblTotal = Estilo.Ayuda("");
+    private readonly Paginador _paginador = new("vehículos", 10, 20, 50);
+
+    // Lista completa recibida de la API; la tabla muestra solo la página actual.
+    private List<Vehiculo> _lista = new();
 
     /// <param name="puedeRegistrar">
     /// false para el rol CONSULTA: se oculta el formulario de registro y
@@ -77,7 +80,8 @@ internal sealed class VehiculosPanel : ModuloBase
         _grilla.CellFormatting += ColorearEstado;
 
         var tarjetaLista = Estilo.Tarjeta("Vehículos registrados");
-        tarjetaLista.Controls.Add(ContenedorLista(filtros, _grilla, _lblVacio, _lblTotal));
+        _cboEstado.Anchor = AnchorStyles.Left;
+        tarjetaLista.Controls.Add(ContenedorLista(filtros, _grilla, _lblVacio, _paginador));
 
         if (puedeRegistrar)
         {
@@ -114,20 +118,28 @@ internal sealed class VehiculosPanel : ModuloBase
         };
         _btnGuardar.Click += async (_, _) => await GuardarAsync();
         _btnLimpiar.Click += (_, _) => LimpiarFormulario();
-        _btnBuscar.Click += async (_, _) => await RecargarAsync();
+        _btnBuscar.Click += async (_, _) => await BuscarAsync();
         _btnLimpiarFiltro.Click += async (_, _) =>
         {
             _txtFiltroMarca.Clear();
             _cboEstado.SelectedIndex = 0;
-            await RecargarAsync();
+            await BuscarAsync();
         };
         _txtFiltroMarca.KeyDown += async (_, e) =>
         {
-            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; await RecargarAsync(); }
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; await BuscarAsync(); }
         };
+        _paginador.Cambio += (_, _) => MostrarPagina(seleccionarId: null);
     }
 
     public override async Task RecargarAsync() => await CargarListaAsync(seleccionarId: null);
+
+    /// <summary>Nueva búsqueda: vuelve a la primera página.</summary>
+    private async Task BuscarAsync()
+    {
+        _paginador.Reiniciar();
+        await CargarListaAsync(seleccionarId: null);
+    }
 
     private async Task CargarListaAsync(int? seleccionarId)
     {
@@ -142,30 +154,40 @@ internal sealed class VehiculosPanel : ModuloBase
 
         if (!r.Exito)
         {
+            _lista = new();
+            _paginador.Actualizar(0);
             _grilla.DataSource = null;
-            _lblTotal.Text = "";
             MostrarVacio(_lblVacio, _grilla, true, "No se pudo obtener el listado.\n" + r.Mensaje);
             Ui.MostrarError(r, "consultar vehículos");
             return;
         }
 
-        var lista = r.Datos!;
-        _grilla.DataSource = lista;
-        _lblTotal.Text = $"{lista.Count} vehículo(s)";
-        MostrarVacio(_lblVacio, _grilla, lista.Count == 0,
-            "No hay vehículos que coincidan con los filtros.");
-        Ui.Mostrar($"Vehículos consultados: {lista.Count} (GET /api/vehiculos).", TipoMensaje.Exito, r.CodigoHttp);
-
+        _lista = r.Datos!;
+        _paginador.Actualizar(_lista.Count);
         if (seleccionarId is not null)
         {
-            foreach (DataGridViewRow fila in _grilla.Rows)
+            // Ir a la página donde quedó el vehículo recién registrado.
+            _paginador.MostrarIndice(_lista.FindIndex(v => v.IdVehiculo == seleccionarId));
+        }
+        MostrarPagina(seleccionarId);
+        MostrarVacio(_lblVacio, _grilla, _lista.Count == 0,
+            "No hay vehículos que coincidan con los filtros.");
+        Ui.Mostrar($"Vehículos consultados: {_lista.Count} (GET /api/vehiculos).", TipoMensaje.Exito, r.CodigoHttp);
+    }
+
+    /// <summary>Muestra en la tabla solo los vehículos de la página actual.</summary>
+    private void MostrarPagina(int? seleccionarId)
+    {
+        _grilla.DataSource = _lista.Skip(_paginador.Offset).Take(_paginador.Tamano).ToList();
+        _grilla.ClearSelection();
+        if (seleccionarId is null) return;
+        foreach (DataGridViewRow fila in _grilla.Rows)
+        {
+            if (fila.DataBoundItem is Vehiculo v && v.IdVehiculo == seleccionarId)
             {
-                if (fila.DataBoundItem is Vehiculo v && v.IdVehiculo == seleccionarId)
-                {
-                    fila.Selected = true;
-                    _grilla.FirstDisplayedScrollingRowIndex = fila.Index;
-                    break;
-                }
+                fila.Selected = true;
+                _grilla.FirstDisplayedScrollingRowIndex = fila.Index;
+                break;
             }
         }
     }

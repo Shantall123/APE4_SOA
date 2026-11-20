@@ -34,7 +34,7 @@ internal abstract class ModuloBase : UserControl
     public abstract Task RecargarAsync();
 
     /// <summary>Raíz con columna izquierda de ancho fijo y columna derecha flexible.</summary>
-    protected static TableLayoutPanel DosColumnas(Control izquierda, Control derecha, int anchoIzquierda = 360)
+    protected static TableLayoutPanel DosColumnas(Control izquierda, Control derecha, int anchoIzquierda = 400)
     {
         var t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, anchoIzquierda));
@@ -50,7 +50,7 @@ internal abstract class ModuloBase : UserControl
     {
         Dock = DockStyle.Fill,
         ColumnCount = 1,
-        AutoScroll = true,
+        AutoScroll = true,      // solo aparece desplazamiento vertical si la ventana es muy baja
         Font = Estilo.Normal,
         ForeColor = Color.FromArgb(33, 37, 41),
         Padding = new Padding(4, 6, 18, 4)

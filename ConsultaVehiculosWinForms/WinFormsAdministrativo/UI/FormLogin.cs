@@ -32,6 +32,7 @@ internal sealed class FormLogin : Form
         MaximizeBox = true;
         MinimizeBox = true;
         StartPosition = FormStartPosition.CenterScreen;
+        AutoScaleDimensions = new SizeF(96F, 96F);   // medidas a 100 %, escaladas por Windows
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Estilo.Fondo;
         Font = new Font("Segoe UI", 11f);

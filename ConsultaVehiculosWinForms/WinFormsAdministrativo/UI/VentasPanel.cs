@@ -11,11 +11,9 @@ namespace WinFormsAdministrativo.UI;
 internal sealed class VentasPanel : ModuloBase
 {
     private readonly ComboBox _cboEstado = Estilo.Lista("Todas", "PENDIENTE", "EN_REVISION", "COMPLETADA", "FALLIDA");
-    private readonly ComboBox _cboTamano = Estilo.Lista("10", "20", "50");
     private readonly Button _btnConsultar = Estilo.Boton("Consultar", principal: true);
-    private readonly Button _btnAnterior = Estilo.Boton("◀ Anterior");
-    private readonly Button _btnSiguiente = Estilo.Boton("Siguiente ▶");
-    private readonly Label _lblPagina = Estilo.Etiqueta("");
+    // Paginación en el servidor: la página y el tamaño se envían como offset y limit.
+    private readonly Paginador _paginador = new("ventas", 10, 20, 50);
     private readonly DataGridView _grilla = Estilo.Grilla();
     private readonly Label _lblVacio = new();
 
@@ -26,12 +24,9 @@ internal sealed class VentasPanel : ModuloBase
     private readonly Label _kFallidas = new();
     private readonly FlowLayoutPanel _indicadores = Estilo.Fila();
 
-    private int _offset;
-    private int _total;
-
     public VentasPanel(ApiClient api, IContextoUi ui) : base(api, ui)
     {
-        _cboTamano.Width = 70;
+        _cboEstado.Anchor = AnchorStyles.Left;
 
         var aviso = new Label
         {
@@ -51,8 +46,6 @@ internal sealed class VentasPanel : ModuloBase
         var filtros = Estilo.Fila();
         filtros.Controls.Add(Estilo.Etiqueta("Estado:"));
         filtros.Controls.Add(_cboEstado);
-        filtros.Controls.Add(Estilo.Etiqueta("Por página:"));
-        filtros.Controls.Add(_cboTamano);
         filtros.Controls.Add(_btnConsultar);
 
 
@@ -67,27 +60,17 @@ internal sealed class VentasPanel : ModuloBase
         Estilo.Columna(_grilla, nameof(Venta.OperacionId), "Operación", 210);
         _grilla.CellFormatting += ColorearEstado;
 
-        var paginacion = Estilo.Fila();
-        paginacion.Controls.Add(_btnAnterior);
-        paginacion.Controls.Add(_lblPagina);
-        paginacion.Controls.Add(_btnSiguiente);
-
         var tarjeta = Estilo.Tarjeta("Ventas registradas");
         // Arriba los indicadores, debajo los filtros y luego la grilla.
-        tarjeta.Controls.Add(ContenedorLista(new Control[] { _indicadores, filtros }, _grilla, _lblVacio, paginacion));
+        tarjeta.Controls.Add(ContenedorLista(new Control[] { _indicadores, filtros }, _grilla, _lblVacio, _paginador));
 
         Controls.Add(tarjeta);
         Controls.Add(aviso);
 
-        _btnConsultar.Click += async (_, _) => { _offset = 0; await RecargarAsync(); };
-        _cboEstado.SelectionChangeCommitted += async (_, _) => { _offset = 0; await RecargarAsync(); };
-        _cboTamano.SelectionChangeCommitted += async (_, _) => { _offset = 0; await RecargarAsync(); };
-        _btnAnterior.Click += async (_, _) => { _offset = Math.Max(0, _offset - Tamano); await RecargarAsync(); };
-        _btnSiguiente.Click += async (_, _) => { _offset += Tamano; await RecargarAsync(); };
-        ActualizarPaginacion();
+        _btnConsultar.Click += async (_, _) => { _paginador.Reiniciar(); await RecargarAsync(); };
+        _cboEstado.SelectionChangeCommitted += async (_, _) => { _paginador.Reiniciar(); await RecargarAsync(); };
+        _paginador.Cambio += async (_, _) => await RecargarAsync();
     }
-
-    private int Tamano => int.Parse(_cboTamano.Text);
 
     public override async Task RecargarAsync()
     {
@@ -95,7 +78,7 @@ internal sealed class VentasPanel : ModuloBase
         Ui.Ocupado(true, "Consultando ventas...");
         _btnConsultar.Enabled = false;
 
-        var r = await Api.ListarVentasAsync(Tamano, _offset, estado);
+        var r = await Api.ListarVentasAsync(_paginador.Tamano, _paginador.Offset, estado);
         var resumen = await Api.ResumenVentasAsync();
 
         _btnConsultar.Enabled = true;
@@ -106,17 +89,15 @@ internal sealed class VentasPanel : ModuloBase
         if (!r.Exito)
         {
             _grilla.DataSource = null;
-            _total = 0;
-            ActualizarPaginacion();
+            _paginador.Actualizar(0);
             MostrarVacio(_lblVacio, _grilla, true, "No se pudo obtener el listado.\n" + r.Mensaje);
             Ui.MostrarError(r, "consultar ventas");
             return;
         }
 
         var pagina = r.Datos!;
-        _total = pagina.Total;
         _grilla.DataSource = pagina.Items;
-        ActualizarPaginacion();
+        _paginador.Actualizar(pagina.Total);
         MostrarVacio(_lblVacio, _grilla, pagina.Items.Count == 0,
             estado is null ? "No hay ventas registradas para su usuario." : $"No hay ventas en estado {estado}.");
         Ui.Mostrar($"Ventas consultadas: {pagina.Items.Count} de {pagina.Total} (GET /api/ventas).",
@@ -133,15 +114,6 @@ internal sealed class VentasPanel : ModuloBase
         _kPendientes.Text = d.Pendientes.ToString();
         _kRevision.Text = d.EnRevision.ToString();
         _kFallidas.Text = d.Fallidas.ToString();
-    }
-
-    private void ActualizarPaginacion()
-    {
-        int paginas = Math.Max(1, (int)Math.Ceiling(_total / (double)Tamano));
-        int actual = _offset / Tamano + 1;
-        _lblPagina.Text = $"Página {actual} de {paginas}  ·  {_total} venta(s)";
-        _btnAnterior.Enabled = _offset > 0;
-        _btnSiguiente.Enabled = _offset + Tamano < _total;
     }
 
     /// <summary>

@@ -54,6 +54,9 @@ internal static class Estilo
     {
         Text = texto,
         AutoSize = true,
+        // Dentro de un TableLayoutPanel, el anclaje izquierda-derecha hace que
+        // el texto se ajuste al ancho de la columna en lugar de cortarse.
+        Anchor = AnchorStyles.Left | AnchorStyles.Right,
         Font = Pequena,
         ForeColor = TextoSuave,
         Margin = new Padding(0, 0, 0, 6)
@@ -105,13 +108,15 @@ internal static class Estilo
             CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
             GridColor = Borde,
             EnableHeadersVisualStyles = false,
-            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-            ColumnHeadersHeight = 34,
+            // Alto de encabezado y filas calculado según la fuente: no se corta
+            // el texto con ninguna escala de pantalla.
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
+            AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCellsExceptHeaders,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
             Font = Normal,
             ForeColor = Color.FromArgb(33, 37, 41)
         };
-        g.RowTemplate.Height = 30;
+        g.ColumnHeadersDefaultCellStyle.Padding = new Padding(4, 7, 4, 7);
         g.ColumnHeadersDefaultCellStyle.BackColor = Primario;
         g.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
         g.ColumnHeadersDefaultCellStyle.Font = Negrita;
@@ -119,7 +124,7 @@ internal static class Estilo
         g.AlternatingRowsDefaultCellStyle.BackColor = FilaAlterna;
         g.DefaultCellStyle.SelectionBackColor = Color.FromArgb(207, 226, 243);
         g.DefaultCellStyle.SelectionForeColor = Color.Black;
-        g.DefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
+        g.DefaultCellStyle.Padding = new Padding(4, 6, 4, 6);
         return g;
     }
 

@@ -12,12 +12,22 @@ internal sealed partial class CompradoresPanel : ModuloBase
     private readonly Button _btnGuardar = Estilo.Boton("Guardar comprador", principal: true);
     private readonly Button _btnLimpiar = Estilo.Boton("Limpiar");
 
-    private readonly TextBox _txtBuscar = new() { Width = 220, PlaceholderText = "Nombre o documento" };
+    // Búsqueda: ancho suficiente para el texto guía y centrada verticalmente con los botones.
+    private readonly TextBox _txtBuscar = new()
+    {
+        Width = 500,
+        PlaceholderText = "Nombre o documento del comprador",
+        Anchor = AnchorStyles.Left,
+        Margin = new Padding(0, 0, 8, 0)
+    };
     private readonly Button _btnBuscar = Estilo.Boton("Buscar", principal: true);
     private readonly Button _btnTodos = Estilo.Boton("Ver todos");
     private readonly DataGridView _grilla = Estilo.Grilla();
     private readonly Label _lblVacio = new();
-    private readonly Label _lblTotal = Estilo.Ayuda("");
+    private readonly Paginador _paginador = new("compradores", 10, 20, 50);
+
+    // Lista completa recibida de la API; la tabla muestra solo la página actual.
+    private List<Comprador> _lista = new();
 
     public CompradoresPanel(ApiClient api, IContextoUi ui) : base(api, ui)
     {
@@ -52,21 +62,30 @@ internal sealed partial class CompradoresPanel : ModuloBase
         Estilo.Columna(_grilla, nameof(Comprador.Correo), "Correo", 180);
 
         var tarjetaLista = Estilo.Tarjeta("Compradores registrados");
-        tarjetaLista.Controls.Add(ContenedorLista(filtros, _grilla, _lblVacio, _lblTotal));
+        tarjetaLista.Controls.Add(ContenedorLista(filtros, _grilla, _lblVacio, _paginador));
 
-        Controls.Add(DosColumnas(tarjetaRegistro, tarjetaLista));
+        // Formulario más ancho: los datos de la tabla (ID, nombre, correo) caben en menos espacio.
+        Controls.Add(DosColumnas(tarjetaRegistro, tarjetaLista, anchoIzquierda: 500));
 
         _btnGuardar.Click += async (_, _) => await GuardarAsync();
         _btnLimpiar.Click += (_, _) => LimpiarFormulario();
-        _btnBuscar.Click += async (_, _) => await RecargarAsync();
-        _btnTodos.Click += async (_, _) => { _txtBuscar.Clear(); await RecargarAsync(); };
+        _btnBuscar.Click += async (_, _) => await BuscarAsync();
+        _btnTodos.Click += async (_, _) => { _txtBuscar.Clear(); await BuscarAsync(); };
         _txtBuscar.KeyDown += async (_, e) =>
         {
-            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; await RecargarAsync(); }
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; await BuscarAsync(); }
         };
+        _paginador.Cambio += (_, _) => MostrarPagina(null);
     }
 
     public override async Task RecargarAsync() => await CargarListaAsync(null);
+
+    /// <summary>Nueva búsqueda: vuelve a la primera página.</summary>
+    private async Task BuscarAsync()
+    {
+        _paginador.Reiniciar();
+        await CargarListaAsync(null);
+    }
 
     private async Task CargarListaAsync(int? seleccionarId)
     {
@@ -78,22 +97,34 @@ internal sealed partial class CompradoresPanel : ModuloBase
 
         if (!r.Exito)
         {
+            _lista = new();
+            _paginador.Actualizar(0);
             _grilla.DataSource = null;
-            _lblTotal.Text = "";
             MostrarVacio(_lblVacio, _grilla, true, "No se pudo obtener el listado.\n" + r.Mensaje);
             Ui.MostrarError(r, "consultar compradores");
             return;
         }
 
-        var lista = r.Datos!;
-        _grilla.DataSource = lista;
-        _lblTotal.Text = $"{lista.Count} comprador(es) registrados por el usuario {Api.Usuario?.Usuario}";
-        MostrarVacio(_lblVacio, _grilla, lista.Count == 0,
+        _lista = r.Datos!;
+        _paginador.Actualizar(_lista.Count);
+        if (seleccionarId is not null)
+        {
+            // Ir a la página donde quedó el comprador recién registrado.
+            _paginador.MostrarIndice(_lista.FindIndex(c => c.Id == seleccionarId));
+        }
+        MostrarPagina(seleccionarId);
+        MostrarVacio(_lblVacio, _grilla, _lista.Count == 0,
             string.IsNullOrWhiteSpace(_txtBuscar.Text)
                 ? "Aún no hay compradores registrados por su usuario."
                 : "Ningún comprador coincide con la búsqueda.");
-        Ui.Mostrar($"Compradores consultados: {lista.Count} (GET /api/compradores).", TipoMensaje.Exito, r.CodigoHttp);
+        Ui.Mostrar($"Compradores consultados: {_lista.Count} (GET /api/compradores).", TipoMensaje.Exito, r.CodigoHttp);
+    }
 
+    /// <summary>Muestra en la tabla solo los compradores de la página actual.</summary>
+    private void MostrarPagina(int? seleccionarId)
+    {
+        _grilla.DataSource = _lista.Skip(_paginador.Offset).Take(_paginador.Tamano).ToList();
+        _grilla.ClearSelection();
         if (seleccionarId is null) return;
         foreach (DataGridViewRow fila in _grilla.Rows)
         {

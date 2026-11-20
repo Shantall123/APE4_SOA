@@ -56,6 +56,9 @@ internal sealed class FormAdministracion : Form, IContextoUi
 
         Text = "Administración de vehículos y compradores";
         StartPosition = FormStartPosition.CenterScreen;
+        // Las medidas del código están pensadas a 96 DPI (100 %); Windows las
+        // escala automáticamente en pantallas con 125 %, 150 % o 200 %.
+        AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Estilo.Fondo;
         Font = Estilo.Normal;
@@ -63,31 +66,61 @@ internal sealed class FormAdministracion : Form, IContextoUi
         Size = new Size(1280, 760);
 
         // ---- Cabecera
-        var cabecera = new Panel { Dock = DockStyle.Top, Height = 64, BackColor = Estilo.Primario, Padding = new Padding(18, 0, 12, 0) };
+        // Cabecera en dos columnas: título y subtítulo apilados a la izquierda,
+        // usuario y botón a la derecha. Todo con tamaño automático (sin posiciones fijas).
+        var cabecera = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Estilo.Primario,
+            Padding = new Padding(18, 8, 14, 8)
+        };
+        cabecera.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        cabecera.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var titulos = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(0),
+            BackColor = Color.Transparent
+        };
         var titulo = new Label
         {
             Text = "Panel administrativo",
             Font = Estilo.Titulo,
             ForeColor = Color.White,
             AutoSize = true,
-            Location = new Point(18, 8)
+            Margin = new Padding(0)
         };
+        _lblSubtitulo.Location = Point.Empty;
+        _lblSubtitulo.Margin = new Padding(2, 0, 0, 0);
+        titulos.Controls.Add(titulo);
+        titulos.Controls.Add(_lblSubtitulo);
+
         var derecha = new FlowLayoutPanel
         {
-            Dock = DockStyle.Right,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 8, 0, 0),
+            Anchor = AnchorStyles.Right,
+            Margin = new Padding(0),
             BackColor = Color.Transparent
         };
-        _btnSalir.Margin = new Padding(0, 4, 0, 0);
+        _lblUsuario.Anchor = AnchorStyles.Left;      // centrado vertical respecto al botón
+        _lblUsuario.Margin = new Padding(0, 0, 12, 0);
+        _btnSalir.Margin = new Padding(0);
         derecha.Controls.Add(_lblUsuario);
         derecha.Controls.Add(_btnSalir);
-        cabecera.Controls.Add(derecha);
-        cabecera.Controls.Add(titulo);
-        cabecera.Controls.Add(_lblSubtitulo);
+
+        cabecera.Controls.Add(titulos, 0, 0);
+        cabecera.Controls.Add(derecha, 1, 0);
 
         // ---- Pestañas: se crean según el rol (ver ConstruirModulos)
         _pestanas.SelectedIndexChanged += async (_, _) => await CargarModuloActualAsync();
@@ -156,6 +189,13 @@ internal sealed class FormAdministracion : Form, IContextoUi
     {
         var pagina = new TabPage(titulo) { BackColor = Estilo.Fondo, Padding = new Padding(4) };
         pagina.Controls.Add(modulo);
+        if (IsHandleCreated)
+        {
+            // Módulos creados después de mostrar la ventana (p. ej. al volver a iniciar
+            // sesión con otro rol): se les aplica la misma escala DPI que al resto.
+            float f = DeviceDpi / 96f;
+            modulo.Scale(new SizeF(f, f));
+        }
         _pestanas.TabPages.Add(pagina);
         _modulos.Add(modulo);
     }
