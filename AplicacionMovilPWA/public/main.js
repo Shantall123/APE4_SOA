@@ -59,6 +59,7 @@ let compradores = [];
 let vehiculoSeleccionado = null;
 let ultimaVenta = null;
 let enviando = false;
+let permisos = { vender: false, historial: false };
 
 // ---------------------------------------------------------------- Utilidades
 function mostrarMensaje(elemento, texto, tipo = 'neutro') {
@@ -147,23 +148,18 @@ function entrar() {
 
   vistaLogin.hidden = true;
   vistaApp.hidden = false;
-  subtitulo.textContent = 'Registro de ventas con JWT e Idempotency-Key';
-  usuarioNombre.textContent = `👤 ${sesion.usuario}`;
+  usuarioNombre.textContent = sesion.usuario;
   usuarioRol.textContent = sesion.rol || '—';
 
-  const puedeVender = ['OPERADOR', 'ADMIN'].includes(sesion.rol);
-  avisoRol.hidden = puedeVender;
-  if (!puedeVender) {
-    avisoRol.textContent = `Su rol (${sesion.rol || 'desconocido'}) no tiene permiso para registrar ventas. `
-      + 'El servidor rechazará la operación con HTTP 403.';
-  }
+  permisos = permisosDe(sesion.rol);
+  aplicarPermisos();
 
   mostrarPestana('venta');
   cargarVehiculos();
-  cargarCompradores();
+  if (permisos.vender) cargarCompradores();
 
   // Si quedó una venta sin confirmar (respuesta incierta), se ofrece verificarla.
-  const pendiente = obtenerPendiente();
+  const pendiente = permisos.vender ? obtenerPendiente() : null;
   if (pendiente) {
     mostrarResultado({
       codigo: null,
@@ -172,6 +168,49 @@ function entrar() {
         + 'se reenvía con la misma Idempotency-Key y el servidor no creará un duplicado.',
       incierto: true,
     });
+  }
+}
+
+/**
+ * Módulos visibles por rol (mismos roles que aplica el backend):
+ *  - OPERADOR y ADMIN: registrar ventas y consultar "Mis ventas".
+ *  - CONSULTA (o rol desconocido): solo el catálogo de vehículos disponibles.
+ * Ocultar módulos es una ayuda de interfaz; el backend sigue validando con 403.
+ */
+const PERMISOS = {
+  ADMIN: { vender: true, historial: true },
+  OPERADOR: { vender: true, historial: true },
+  CONSULTA: { vender: false, historial: false },
+};
+
+function permisosDe(rol) {
+  return PERMISOS[rol] || PERMISOS.CONSULTA;
+}
+
+function aplicarPermisos() {
+  const { vender, historial } = permisos;
+
+  $('#pestanas').hidden = !(vender && historial);
+  $('#panel-comprador').hidden = !vender;
+  $('#panel-confirmar').hidden = !vender;
+  if (!vender) panelResultado.hidden = true;
+
+  // El panel de vehículos pasa a ser un catálogo de solo lectura.
+  $('#paso-vehiculo').hidden = !vender;
+  $('#titulo-vehiculo').textContent = vender ? 'Vehículo' : 'Vehículos disponibles';
+  $('#ayuda-vehiculo').textContent = vender
+    ? 'Solo se muestran vehículos DISPONIBLES. Toque uno para seleccionarlo.'
+    : 'Catálogo de vehículos DISPONIBLES para la venta.';
+  contenedorVehiculos.setAttribute('role', vender ? 'radiogroup' : 'list');
+
+  subtitulo.textContent = vender
+    ? 'Registro de ventas con JWT e Idempotency-Key'
+    : 'Consulta del catálogo de vehículos disponibles';
+
+  avisoRol.hidden = vender;
+  if (!vender) {
+    avisoRol.textContent = `Su rol (${sesion.rol || 'desconocido'}) es de solo consulta: `
+      + 'puede ver los vehículos disponibles, pero no registrar ventas ni consultar ventas.';
   }
 }
 
@@ -194,7 +233,8 @@ botonSalir.addEventListener('click', () => salir('Sesión cerrada. El token fue 
 
 // ---------------------------------------------------------------- Pestañas
 function mostrarPestana(nombre) {
-  const venta = nombre === 'venta';
+  // Sin permiso de historial solo existe la vista principal.
+  const venta = nombre === 'venta' || !permisos.historial;
   seccionVenta.hidden = !venta;
   seccionHistorial.hidden = venta;
   tabVenta.classList.toggle('activa', venta);
@@ -233,17 +273,24 @@ function pintarVehiculos() {
   contenedorVehiculos.replaceChildren();
   if (visibles.length === 0) {
     contenedorVehiculos.append(crearElemento('div', 'vacio', vehiculos.length === 0
-      ? 'HTTP 200: no hay vehículos DISPONIBLES para vender.'
+      ? 'HTTP 200: no hay vehículos DISPONIBLES.'
       : 'Ningún vehículo coincide con la búsqueda.'));
     return;
   }
 
   for (const v of visibles) {
-    const seleccionado = vehiculoSeleccionado?.idVehiculo === v.idVehiculo;
-    const tarjeta = crearElemento('button', `vehiculo opcion${seleccionado ? ' seleccionado' : ''}`);
-    tarjeta.type = 'button';
-    tarjeta.setAttribute('role', 'radio');
-    tarjeta.setAttribute('aria-checked', String(seleccionado));
+    const seleccionado = permisos.vender && vehiculoSeleccionado?.idVehiculo === v.idVehiculo;
+    // Con permiso de venta la tarjeta es seleccionable; si no, es solo informativa.
+    const tarjeta = permisos.vender
+      ? crearElemento('button', `vehiculo opcion${seleccionado ? ' seleccionado' : ''}`)
+      : crearElemento('article', 'vehiculo solo-lectura');
+    if (permisos.vender) {
+      tarjeta.type = 'button';
+      tarjeta.setAttribute('role', 'radio');
+      tarjeta.setAttribute('aria-checked', String(seleccionado));
+    } else {
+      tarjeta.setAttribute('role', 'listitem');
+    }
 
     const cabecera = crearElemento('div', 'vehiculo-cabecera');
     const titulo = crearElemento('div');
@@ -255,7 +302,7 @@ function pintarVehiculos() {
     tarjeta.append(cabecera);
     if (seleccionado) tarjeta.append(crearElemento('span', 'marca-seleccion', '✓ Seleccionado'));
 
-    tarjeta.addEventListener('click', () => {
+    if (permisos.vender) tarjeta.addEventListener('click', () => {
       vehiculoSeleccionado = v;
       pintarVehiculos();
       actualizarResumen();
@@ -311,7 +358,7 @@ function actualizarResumen() {
 botonRegistrar.addEventListener('click', async () => {
   const v = vehiculoSeleccionado;
   const c = compradorSeleccionado();
-  if (!v || !c) return;
+  if (!permisos.vender || !v || !c) return;
 
   // Se reutiliza la clave si hay una venta pendiente con los mismos datos;
   // así un reintento nunca genera una segunda venta.
@@ -331,6 +378,7 @@ botonReintentar.addEventListener('click', async () => {
 });
 
 async function enviarVenta(pendiente) {
+  if (!permisos.vender) return;
   enviando = true;
   botonRegistrar.disabled = true;
   botonReintentar.disabled = true;
@@ -474,6 +522,7 @@ botonNuevaVenta.addEventListener('click', () => {
 
 // ---------------------------------------------------------------- Mis ventas
 async function cargarHistorial() {
+  if (!permisos.historial) return;
   contenedorVentas.replaceChildren();
   mostrarMensaje(mensajeHistorial, 'Consultando ventas…');
   try {

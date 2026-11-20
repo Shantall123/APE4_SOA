@@ -30,10 +30,9 @@
       <main id="vista-login">
         <section class="panel" aria-labelledby="titulo-login">
           <div class="seccion-cabecera">
-            <span class="paso">🔐</span>
             <h2 id="titulo-login">Iniciar sesión</h2>
           </div>
-          <p class="ayuda">Use su usuario del sistema. El token JWT se obtiene con <code>POST /oauth/token</code> a través de NGINX.</p>
+          <p class="ayuda">Use su usuario del sistema.</p>
           <form id="form-login" novalidate>
             <label for="usuario">Usuario</label>
             <input id="usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required />
@@ -54,35 +53,35 @@
       <!-- ============================== APLICACIÓN ============================== -->
       <main id="vista-app" hidden>
         <section class="barra-usuario" aria-label="Sesión">
-          <div>
-            <span class="usuario-nombre" id="usuario-nombre">—</span>
-            <span class="rol" id="usuario-rol">—</span>
+          <div class="identidad">
+            <span class="dato-sesion"><span class="etiqueta-sesion">Usuario:</span> <strong id="usuario-nombre">—</strong></span>
+            <span class="dato-sesion"><span class="etiqueta-sesion">Rol:</span> <span class="rol" id="usuario-rol">—</span></span>
           </div>
           <button id="salir" class="boton-discreto boton-pequeno" type="button">Cerrar sesión</button>
         </section>
 
-        <div id="aviso-rol" class="mensaje aviso" hidden></div>
+        <div id="aviso-rol" class="mensaje informativo" hidden></div>
 
-        <nav class="pestanas" aria-label="Secciones">
-          <button id="tab-venta" class="pestana activa" type="button" aria-pressed="true">🛒 Nueva venta</button>
-          <button id="tab-historial" class="pestana" type="button" aria-pressed="false">📄 Mis ventas</button>
+        <nav id="pestanas" class="pestanas" aria-label="Secciones">
+          <button id="tab-venta" class="pestana activa" type="button" aria-pressed="true">Nueva venta</button>
+          <button id="tab-historial" class="pestana" type="button" aria-pressed="false">Mis ventas</button>
         </nav>
 
         <!-- ------------------------------ NUEVA VENTA ------------------------------ -->
         <div id="seccion-venta">
           <section class="panel" aria-labelledby="titulo-vehiculo">
             <div class="seccion-cabecera resultados">
-              <div class="titulo-bloque"><span class="paso">01</span><h2 id="titulo-vehiculo">Vehículo</h2></div>
+              <div class="titulo-bloque"><span class="paso" id="paso-vehiculo">01</span><h2 id="titulo-vehiculo">Vehículo</h2></div>
               <button id="recargar-vehiculos" class="boton-discreto boton-pequeno" type="button">↻ Actualizar</button>
             </div>
-            <p class="ayuda">Solo se muestran vehículos <strong>DISPONIBLES</strong>. Toque uno para seleccionarlo.</p>
+            <p class="ayuda" id="ayuda-vehiculo">Solo se muestran vehículos <strong>DISPONIBLES</strong>. Toque uno para seleccionarlo.</p>
             <input id="buscar-vehiculo" type="search" placeholder="Buscar por marca, modelo o placa" autocomplete="off" />
             <div id="vehiculos" class="vehiculos seleccionables" role="radiogroup" aria-label="Vehículos disponibles">
               <div class="vacio">Cargando vehículos…</div>
             </div>
           </section>
 
-          <section class="panel" aria-labelledby="titulo-comprador">
+          <section id="panel-comprador" class="panel" aria-labelledby="titulo-comprador">
             <div class="seccion-cabecera resultados">
               <div class="titulo-bloque"><span class="paso">02</span><h2 id="titulo-comprador">Comprador</h2></div>
               <button id="recargar-compradores" class="boton-discreto boton-pequeno" type="button">↻ Actualizar</button>
@@ -94,7 +93,7 @@
             <p class="ayuda nota">Los compradores se registran desde la aplicación administrativa (Windows Forms).</p>
           </section>
 
-          <section class="panel" aria-labelledby="titulo-confirmar">
+          <section id="panel-confirmar" class="panel" aria-labelledby="titulo-confirmar">
             <div class="seccion-cabecera">
               <span class="paso">03</span>
               <h2 id="titulo-confirmar">Confirmar venta</h2>
@@ -130,7 +129,7 @@
         <div id="seccion-historial" hidden>
           <section class="panel" aria-labelledby="titulo-historial">
             <div class="seccion-cabecera resultados">
-              <div class="titulo-bloque"><span class="paso">📄</span><h2 id="titulo-historial">Mis ventas</h2></div>
+              <div class="titulo-bloque"><span class="paso"></span><h2 id="titulo-historial">Mis ventas</h2></div>
               <button id="recargar-ventas" class="boton-discreto boton-pequeno" type="button">↻ Actualizar</button>
             </div>
             <p class="ayuda">Últimas ventas registradas por su usuario. Toque una para consultar su estado actual (<code>GET /api/ventas/{id}</code>).</p>

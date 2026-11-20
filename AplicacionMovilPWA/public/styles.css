@@ -66,7 +66,12 @@ input[type="search"] { margin-bottom: 12px; }
 .boton-pequeno { min-height: 34px; padding: 6px 11px; font-size: 13px; }
 
 .barra-usuario { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 15px; margin-bottom: 12px; border-radius: 14px; background: #103b56; color: #fff; }
-.usuario-nombre { font-weight: 800; margin-right: 8px; }
+.identidad { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
+.dato-sesion { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.etiqueta-sesion { color: #b9d2e0; font-weight: 600; }
+.dato-sesion strong { font-weight: 800; }
+.mensaje.informativo { color: #1d4f6b; background: #eaf4fa; border-color: #c4ddeb; margin: 0 0 14px; }
+.vehiculo.solo-lectura { cursor: default; }
 .rol { font-size: 11px; font-weight: 900; letter-spacing: .05em; padding: 4px 9px; border-radius: 999px; background: #e7ae47; color: #3b2a05; }
 .barra-usuario .boton-discreto { color: #fff; border-color: #ffffff66; }
 
