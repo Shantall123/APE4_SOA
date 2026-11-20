@@ -24,7 +24,26 @@ internal sealed class FormAdministracion : Form, IContextoUi
     private readonly ToolStripProgressBar _progreso = new() { Style = ProgressBarStyle.Marquee, Visible = false, MarqueeAnimationSpeed = 25 };
     private readonly ToolStripStatusLabel _lblServidor = new() { BorderSides = ToolStripStatusLabelBorderSides.Left, ForeColor = Estilo.TextoSuave };
 
-    private readonly ModuloBase[] _modulos;
+    private readonly Label _lblSubtitulo = new()
+    {
+        Font = Estilo.Pequena,
+        ForeColor = Color.FromArgb(200, 215, 230),
+        AutoSize = true,
+        Location = new Point(20, 38)
+    };
+    private readonly Label _lblSinModulos = new()
+    {
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = Estilo.TextoSuave,
+        Font = Estilo.Subtitulo,
+        Visible = false
+    };
+
+    // Solo contiene los módulos que el rol actual puede usar.
+    private readonly List<ModuloBase> _modulos = new();
+    private string? _rolConstruido;
+    private bool _construyendo;
     private bool _reautenticando;
     private int _operaciones;
 
@@ -53,14 +72,6 @@ internal sealed class FormAdministracion : Form, IContextoUi
             AutoSize = true,
             Location = new Point(18, 8)
         };
-        var subtitulo = new Label
-        {
-            Text = "Registro y consulta de vehículos y compradores · consulta de ventas",
-            Font = Estilo.Pequena,
-            ForeColor = Color.FromArgb(200, 215, 230),
-            AutoSize = true,
-            Location = new Point(20, 38)
-        };
         var derecha = new FlowLayoutPanel
         {
             Dock = DockStyle.Right,
@@ -76,26 +87,14 @@ internal sealed class FormAdministracion : Form, IContextoUi
         derecha.Controls.Add(_btnSalir);
         cabecera.Controls.Add(derecha);
         cabecera.Controls.Add(titulo);
-        cabecera.Controls.Add(subtitulo);
+        cabecera.Controls.Add(_lblSubtitulo);
 
-        // ---- Pestañas
-        _modulos = new ModuloBase[]
-        {
-            new VehiculosPanel(api, this),
-            new CompradoresPanel(api, this),
-            new VentasPanel(api, this)
-        };
-        string[] nombres = { "🚗  Vehículos", "👤  Compradores", "📄  Ventas (consulta)" };
-        for (int i = 0; i < _modulos.Length; i++)
-        {
-            var pagina = new TabPage(nombres[i]) { BackColor = Estilo.Fondo, Padding = new Padding(4) };
-            pagina.Controls.Add(_modulos[i]);
-            _pestanas.TabPages.Add(pagina);
-        }
-        _pestanas.SelectedIndexChanged += async (_, _) => await _modulos[_pestanas.SelectedIndex].CargarSiHaceFaltaAsync();
+        // ---- Pestañas: se crean según el rol (ver ConstruirModulos)
+        _pestanas.SelectedIndexChanged += async (_, _) => await CargarModuloActualAsync();
 
         var contenedor = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 10, 10, 6) };
         contenedor.Controls.Add(_pestanas);
+        contenedor.Controls.Add(_lblSinModulos);
 
         // ---- Barra de estado
         var barra = new StatusStrip { SizingGrip = false, BackColor = Color.White, Font = Estilo.Normal };
@@ -106,6 +105,7 @@ internal sealed class FormAdministracion : Form, IContextoUi
         Controls.Add(barra);
         Controls.Add(cabecera);
 
+        ConstruirModulos();
         ActualizarUsuario();
         Mostrar("Listo.", TipoMensaje.Info);
 
@@ -117,7 +117,54 @@ internal sealed class FormAdministracion : Form, IContextoUi
             CerroSesion = true;
             Close();
         };
-        Shown += async (_, _) => await _modulos[0].CargarSiHaceFaltaAsync();
+        Shown += async (_, _) => await CargarModuloActualAsync();
+    }
+
+    /// <summary>
+    /// Crea únicamente las pestañas que el rol puede usar:
+    /// ADMIN y OPERADOR → Vehículos, Compradores y Ventas;
+    /// CONSULTA → solo Vehículos, sin el formulario de registro.
+    /// </summary>
+    private void ConstruirModulos()
+    {
+        var permisos = Permisos.Para(_api.Usuario?.Rol);
+        _rolConstruido = _api.Usuario?.Rol;
+        _construyendo = true;
+
+        // Liberar los módulos de una sesión anterior (p. ej. tras volver a iniciar sesión con otro rol).
+        var anteriores = _pestanas.TabPages.Cast<TabPage>().ToList();
+        _pestanas.TabPages.Clear();
+        anteriores.ForEach(p => p.Dispose());
+        _modulos.Clear();
+
+        if (permisos.VerVehiculos)
+            AgregarModulo("🚗  Vehículos", new VehiculosPanel(_api, this, permisos.RegistrarVehiculos));
+        if (permisos.GestionarCompradores)
+            AgregarModulo("👤  Compradores", new CompradoresPanel(_api, this));
+        if (permisos.ConsultarVentas)
+            AgregarModulo("📄  Ventas (consulta)", new VentasPanel(_api, this));
+
+        bool hayModulos = _modulos.Count > 0;
+        _pestanas.Visible = hayModulos;
+        _lblSinModulos.Visible = !hayModulos;
+        _lblSinModulos.Text = $"El rol «{_api.Usuario?.Rol}» no tiene módulos habilitados en esta aplicación.";
+        _lblSubtitulo.Text = permisos.Descripcion;
+        _construyendo = false;
+    }
+
+    private void AgregarModulo(string titulo, ModuloBase modulo)
+    {
+        var pagina = new TabPage(titulo) { BackColor = Estilo.Fondo, Padding = new Padding(4) };
+        pagina.Controls.Add(modulo);
+        _pestanas.TabPages.Add(pagina);
+        _modulos.Add(modulo);
+    }
+
+    private async Task CargarModuloActualAsync()
+    {
+        if (_construyendo) return;
+        int i = _pestanas.SelectedIndex;
+        if (i >= 0 && i < _modulos.Count) await _modulos[i].CargarSiHaceFaltaAsync();
     }
 
     private void ActualizarUsuario() =>
@@ -200,7 +247,16 @@ internal sealed class FormAdministracion : Form, IContextoUi
             {
                 ActualizarUsuario();
                 Mostrar("Sesión renovada. Repita la operación.", TipoMensaje.Exito);
-                await _modulos[_pestanas.SelectedIndex].RecargarAsync();
+                if (_api.Usuario?.Rol != _rolConstruido)
+                {
+                    // Se ingresó con otro rol: rehacer las pestañas según sus permisos.
+                    ConstruirModulos();
+                    await CargarModuloActualAsync();
+                }
+                else if (_pestanas.SelectedIndex >= 0 && _pestanas.SelectedIndex < _modulos.Count)
+                {
+                    await _modulos[_pestanas.SelectedIndex].RecargarAsync();
+                }
             }
             else
             {

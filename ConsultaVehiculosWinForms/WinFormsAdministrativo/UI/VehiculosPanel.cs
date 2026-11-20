@@ -31,7 +31,11 @@ internal sealed class VehiculosPanel : ModuloBase
     private readonly Label _lblVacio = new();
     private readonly Label _lblTotal = Estilo.Ayuda("");
 
-    public VehiculosPanel(ApiClient api, IContextoUi ui) : base(api, ui)
+    /// <param name="puedeRegistrar">
+    /// false para el rol CONSULTA: se oculta el formulario de registro y
+    /// el listado ocupa todo el ancho.
+    /// </param>
+    public VehiculosPanel(ApiClient api, IContextoUi ui, bool puedeRegistrar) : base(api, ui)
     {
         // ---- Tarjeta de registro
         var form = Formulario();
@@ -75,7 +79,22 @@ internal sealed class VehiculosPanel : ModuloBase
         var tarjetaLista = Estilo.Tarjeta("Vehículos registrados");
         tarjetaLista.Controls.Add(ContenedorLista(filtros, _grilla, _lblVacio, _lblTotal));
 
-        Controls.Add(DosColumnas(tarjetaRegistro, tarjetaLista));
+        if (puedeRegistrar)
+        {
+            Controls.Add(DosColumnas(tarjetaRegistro, tarjetaLista));
+        }
+        else
+        {
+            tarjetaRegistro.Dispose();
+            Controls.Add(tarjetaLista);
+            Controls.Add(new Label
+            {
+                Dock = DockStyle.Top, AutoSize = true, Font = Estilo.Normal,
+                BackColor = Color.FromArgb(232, 240, 248), ForeColor = Estilo.Primario,
+                Padding = new Padding(10, 8, 10, 8),
+                Text = $"ℹ  Su rol ({api.Usuario?.Rol}) permite únicamente consultar el catálogo de vehículos."
+            });
+        }
 
         // ---- Eventos
         _txtChasis.TextChanged += (_, _) =>
