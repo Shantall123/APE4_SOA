@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#103b56" />
-    <meta name="description" content="Consulta móvil de vehículos a través de una API REST con autenticación JWT." />
+    <meta name="description" content="PWA móvil para iniciar sesión y registrar ventas de vehículos con JWT e Idempotency-Key." />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>Vehículos Móvil · PWA</title>
+    <title>Ventas Móvil · PWA</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
@@ -19,46 +19,133 @@
     <div class="app">
       <header class="encabezado">
         <div class="logo" aria-hidden="true">🚙</div>
-        <div>
+        <div class="encabezado-texto">
           <p class="eyebrow">APLICACIÓN MÓVIL · PWA</p>
-          <h1>Consulta de vehículos</h1>
-          <p class="subtitulo">Cliente de la API Java Spring Boot</p>
+          <h1>Ventas de vehículos</h1>
+          <p class="subtitulo" id="subtitulo">Inicie sesión para registrar ventas</p>
         </div>
       </header>
 
-      <main>
-        <section class="panel" aria-labelledby="titulo-acceso">
+      <!-- ============================== LOGIN ============================== -->
+      <main id="vista-login">
+        <section class="panel" aria-labelledby="titulo-login">
           <div class="seccion-cabecera">
-            <span class="paso">01</span>
-            <h2 id="titulo-acceso">Acceso con JWT</h2>
+            <h2 id="titulo-login">Iniciar sesión</h2>
           </div>
-          <p class="ayuda">Se utiliza un token obtenido mediante el servicio de autenticación.</p>
-          <form id="formulario" novalidate>
-            <label for="jwt">Token de usuario</label>
+          <p class="ayuda">Use su usuario del sistema.</p>
+          <form id="form-login" novalidate>
+            <label for="usuario">Usuario</label>
+            <input id="usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+            <label for="clave" class="separado">Contraseña</label>
             <div class="fila-token">
-              <input id="jwt" type="password" placeholder="Pegar JWT de Postman" autocapitalize="none" autocomplete="off" spellcheck="false" />
-              <button id="alternarToken" type="button" class="boton-secundario" aria-label="Mostrar token" aria-pressed="false">Mostrar</button>
+              <input id="clave" name="clave" type="password" autocomplete="current-password" required />
+              <button id="alternarClave" type="button" class="boton-secundario" aria-label="Mostrar contraseña" aria-pressed="false">Mostrar</button>
             </div>
             <div class="acciones">
-              <button id="consultar" class="boton-primario" type="submit">Consultar vehículos</button>
-              <button id="borrar" class="boton-discreto" type="button">Borrar token</button>
+              <button id="ingresar" class="boton-primario" type="submit">Ingresar</button>
             </div>
           </form>
-          <div id="mensaje" class="mensaje neutro" role="status" aria-live="polite">Listo para consultar.</div>
-          <p class="seguridad">El token permanece en memoria; no se almacena en el dispositivo.</p>
-        </section>
-
-        <section class="panel listado" aria-labelledby="titulo-vehiculos">
-          <div class="seccion-cabecera resultados">
-            <div class="titulo-bloque"><span class="paso">02</span><h2 id="titulo-vehiculos">Vehículos registrados</h2></div>
-            <span id="contador" class="contador">0 vehículos</span>
-          </div>
-          <div id="vehiculos" class="vehiculos">
-            <div class="vacio">No hay información todavía. Se debe realizar una consulta para mostrar vehículos.</div>
-          </div>
+          <div id="mensaje-login" class="mensaje neutro" role="status" aria-live="polite">Ingrese sus credenciales.</div>
+          <p class="seguridad">El token se conserva solo durante esta sesión del navegador y se elimina al cerrar sesión.</p>
         </section>
       </main>
-      <footer><span id="conexion">Comprobando conexión…</span> · Datos proporcionados por la API REST</footer>
+
+      <!-- ============================== APLICACIÓN ============================== -->
+      <main id="vista-app" hidden>
+        <section class="barra-usuario" aria-label="Sesión">
+          <div class="identidad">
+            <span class="dato-sesion"><span class="etiqueta-sesion">Usuario:</span> <strong id="usuario-nombre">—</strong></span>
+            <span class="dato-sesion"><span class="etiqueta-sesion">Rol:</span> <span class="rol" id="usuario-rol">—</span></span>
+          </div>
+          <button id="salir" class="boton-discreto boton-pequeno" type="button">Cerrar sesión</button>
+        </section>
+
+        <div id="aviso-rol" class="mensaje informativo" hidden></div>
+
+        <nav id="pestanas" class="pestanas" aria-label="Secciones">
+          <button id="tab-venta" class="pestana activa" type="button" aria-pressed="true">Nueva venta</button>
+          <button id="tab-historial" class="pestana" type="button" aria-pressed="false">Mis ventas</button>
+        </nav>
+
+        <!-- ------------------------------ NUEVA VENTA ------------------------------ -->
+        <div id="seccion-venta">
+          <section class="panel" aria-labelledby="titulo-vehiculo">
+            <div class="seccion-cabecera resultados">
+              <div class="titulo-bloque"><span class="paso" id="paso-vehiculo">01</span><h2 id="titulo-vehiculo">Vehículo</h2></div>
+              <button id="recargar-vehiculos" class="boton-discreto boton-pequeno" type="button">↻ Actualizar</button>
+            </div>
+            <p class="ayuda" id="ayuda-vehiculo">Solo se muestran vehículos <strong>DISPONIBLES</strong>. Toque uno para seleccionarlo.</p>
+            <input id="buscar-vehiculo" type="search" placeholder="Buscar por marca, modelo o placa" autocomplete="off" />
+            <div id="vehiculos" class="vehiculos seleccionables" role="radiogroup" aria-label="Vehículos disponibles">
+              <div class="vacio">Cargando vehículos…</div>
+            </div>
+          </section>
+
+          <section id="panel-comprador" class="panel" aria-labelledby="titulo-comprador">
+            <div class="seccion-cabecera resultados">
+              <div class="titulo-bloque"><span class="paso">02</span><h2 id="titulo-comprador">Comprador</h2></div>
+              <button id="recargar-compradores" class="boton-discreto boton-pequeno" type="button">↻ Actualizar</button>
+            </div>
+            <label for="comprador">Seleccione el comprador</label>
+            <select id="comprador">
+              <option value="">Cargando compradores…</option>
+            </select>
+            <p class="ayuda nota">Los compradores se registran desde la aplicación administrativa (Windows Forms).</p>
+          </section>
+
+          <section id="panel-confirmar" class="panel" aria-labelledby="titulo-confirmar">
+            <div class="seccion-cabecera">
+              <span class="paso">03</span>
+              <h2 id="titulo-confirmar">Confirmar venta</h2>
+            </div>
+            <dl id="resumen" class="resumen">
+              <div><dt>Vehículo</dt><dd id="resumen-vehiculo">Sin seleccionar</dd></div>
+              <div><dt>Comprador</dt><dd id="resumen-comprador">Sin seleccionar</dd></div>
+              <div><dt>Precio de referencia</dt><dd id="resumen-precio">—</dd></div>
+            </dl>
+            <p class="ayuda nota">El precio definitivo y el estado los confirma el servidor al reservar el vehículo.</p>
+            <div class="acciones">
+              <button id="registrar" class="boton-primario" type="button" disabled>Registrar venta</button>
+            </div>
+            <div id="mensaje-venta" class="mensaje neutro" role="status" aria-live="polite">Seleccione un vehículo y un comprador.</div>
+          </section>
+
+          <!-- Resultado real de POST /api/ventas -->
+          <section id="resultado" class="panel resultado" hidden aria-labelledby="titulo-resultado">
+            <div class="seccion-cabecera resultados">
+              <div class="titulo-bloque"><span id="resultado-http" class="http">HTTP —</span><h2 id="titulo-resultado">Resultado</h2></div>
+            </div>
+            <p id="resultado-mensaje" class="resultado-mensaje"></p>
+            <dl id="resultado-datos" class="resumen"></dl>
+            <div class="acciones">
+              <button id="consultar-estado" class="boton-secundario" type="button" hidden>Consultar estado</button>
+              <button id="reintentar" class="boton-primario" type="button" hidden>Verificar / reintentar sin duplicar</button>
+              <button id="nueva-venta" class="boton-discreto" type="button">Nueva venta</button>
+            </div>
+          </section>
+        </div>
+
+        <!-- ------------------------------ MIS VENTAS ------------------------------ -->
+        <div id="seccion-historial" hidden>
+          <section class="panel" aria-labelledby="titulo-historial">
+            <div class="seccion-cabecera resultados">
+              <div class="titulo-bloque"><span class="paso"></span><h2 id="titulo-historial">Mis ventas</h2></div>
+              <button id="recargar-ventas" class="boton-discreto boton-pequeno" type="button">↻ Actualizar</button>
+            </div>
+            <p class="ayuda">Últimas ventas registradas por su usuario. Toque una para consultar su estado actual (<code>GET /api/ventas/{id}</code>).</p>
+            <form id="form-buscar-venta" class="buscador" novalidate>
+              <label for="buscar-venta" class="oculto">ID de venta</label>
+              <input id="buscar-venta" type="number" inputmode="numeric" min="1" step="1" placeholder="Buscar por ID de venta (ej.: 20)" autocomplete="off" />
+              <button id="boton-buscar-venta" class="boton-primario" type="submit">Buscar</button>
+              <button id="limpiar-busqueda" class="boton-discreto" type="button" hidden>Ver todas</button>
+            </form>
+            <div id="mensaje-historial" class="mensaje neutro" role="status" aria-live="polite">—</div>
+            <div id="ventas" class="vehiculos"></div>
+          </section>
+        </div>
+      </main>
+
+      <footer><span id="conexion">Comprobando conexión…</span> · Servicios a través de NGINX</footer>
     </div>
   </body>
 </html>

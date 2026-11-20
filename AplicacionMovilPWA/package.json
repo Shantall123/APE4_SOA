@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Aplicación móvil PWA para consultar vehículos de Spring Boot con JWT",
+  "description": "PWA móvil con login JWT y registro exclusivo de ventas (Idempotency-Key) a través de NGINX",
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
@@ -11,5 +11,5 @@
     "build": "node scripts/build.mjs",
     "preview": "node server.mjs --dir=dist --port=4173"
   },
-  "engines": { "node": ">=20" }
+  "engines": { "node": ">=20.12" }
 }
