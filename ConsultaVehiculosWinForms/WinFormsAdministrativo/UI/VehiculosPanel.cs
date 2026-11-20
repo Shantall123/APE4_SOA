@@ -1,0 +1,280 @@
+using WinFormsAdministrativo.Models;
+using WinFormsAdministrativo.Services;
+
+namespace WinFormsAdministrativo.UI;
+
+/// <summary>Pestaña Vehículos: POST /api/vehiculos y GET /api/vehiculos (API Java vía NGINX).</summary>
+internal sealed class VehiculosPanel : ModuloBase
+{
+    // Registro
+    private readonly TextBox _txtMarca = Estilo.Texto(50);
+    private readonly TextBox _txtModelo = Estilo.Texto(50);
+    private readonly TextBox _txtPlaca = Estilo.Texto(7, CharacterCasing.Upper);
+    private readonly TextBox _txtChasis = Estilo.Texto(17, CharacterCasing.Upper);
+    private readonly Label _lblChasis = Estilo.Ayuda("0 / 17 caracteres");
+    private readonly NumericUpDown _numAnio = new() { Minimum = 1900, Maximum = DateTime.Now.Year + 1, Value = DateTime.Now.Year };
+    private readonly TextBox _txtColor = Estilo.Texto(30);
+    private readonly NumericUpDown _numPrecio = new()
+    {
+        Minimum = 0, Maximum = 9_999_999_999.99m, DecimalPlaces = 2, ThousandsSeparator = true,
+        Increment = 500, Value = 0
+    };
+    private readonly Button _btnGuardar = Estilo.Boton("Guardar vehículo", principal: true);
+    private readonly Button _btnLimpiar = Estilo.Boton("Limpiar");
+
+    // Listado
+    private readonly TextBox _txtFiltroMarca = new() { Width = 200, PlaceholderText = "Ej.: Toyota", Anchor = AnchorStyles.Left };
+    private readonly ComboBox _cboEstado = Estilo.Lista("Todos", "DISPONIBLE", "RESERVADO", "VENDIDO");
+    private readonly Button _btnBuscar = Estilo.Boton("Buscar", principal: true);
+    private readonly Button _btnLimpiarFiltro = Estilo.Boton("Ver todos");
+    private readonly DataGridView _grilla = Estilo.Grilla();
+    private readonly Label _lblVacio = new();
+    private readonly Paginador _paginador = new("vehículos", 10, 20, 50);
+
+    // Lista completa recibida de la API; la tabla muestra solo la página actual.
+    private List<Vehiculo> _lista = new();
+
+    /// <param name="puedeRegistrar">
+    /// false para el rol CONSULTA: se oculta el formulario de registro y
+    /// el listado ocupa todo el ancho.
+    /// </param>
+    public VehiculosPanel(ApiClient api, IContextoUi ui, bool puedeRegistrar) : base(api, ui)
+    {
+        // ---- Tarjeta de registro
+        var form = Formulario();
+        Campo(form, "Marca *", _txtMarca);
+        Campo(form, "Modelo *", _txtModelo);
+        Campo(form, "Placa *", _txtPlaca, "Máximo 7 caracteres, sin guion (ej.: PBA1234).");
+        Campo(form, "Chasis (VIN) *", _txtChasis);
+        form.Controls.Add(_lblChasis);
+        Campo(form, "Año *", _numAnio);
+        Campo(form, "Color *", _txtColor);
+        Campo(form, "Precio (USD) *", _numPrecio, "Mayor que 0, máximo dos decimales.");
+        var acciones = Estilo.Fila();
+        acciones.Controls.Add(_btnGuardar);
+        acciones.Controls.Add(_btnLimpiar);
+        form.Controls.Add(acciones);
+        form.Controls.Add(Estilo.Ayuda("* Campos obligatorios. El vehículo se crea en estado DISPONIBLE."));
+
+        var tarjetaRegistro = Estilo.Tarjeta("Registrar vehículo");
+        tarjetaRegistro.Controls.Add(form);
+
+        // ---- Tarjeta de listado
+        var filtros = Estilo.Fila();
+        filtros.Controls.Add(Estilo.Etiqueta("Marca:"));
+        filtros.Controls.Add(_txtFiltroMarca);
+        filtros.Controls.Add(Estilo.Etiqueta("Estado:"));
+        filtros.Controls.Add(_cboEstado);
+        filtros.Controls.Add(_btnBuscar);
+        filtros.Controls.Add(_btnLimpiarFiltro);
+
+        Estilo.Columna(_grilla, nameof(Vehiculo.IdVehiculo), "ID", 45);
+        Estilo.Columna(_grilla, nameof(Vehiculo.Marca), "Marca", 100);
+        Estilo.Columna(_grilla, nameof(Vehiculo.Modelo), "Modelo", 100);
+        Estilo.Columna(_grilla, nameof(Vehiculo.Placa), "Placa", 80);
+        Estilo.Columna(_grilla, nameof(Vehiculo.Chasis), "Chasis", 150);
+        Estilo.Columna(_grilla, nameof(Vehiculo.Anio), "Año", 55);
+        Estilo.Columna(_grilla, nameof(Vehiculo.Color), "Color", 75);
+        Estilo.Columna(_grilla, nameof(Vehiculo.Precio), "Precio (USD)", 95, "N2", derecha: true);
+        Estilo.Columna(_grilla, nameof(Vehiculo.Estado), "Estado", 90);
+        _grilla.CellFormatting += ColorearEstado;
+
+        var tarjetaLista = Estilo.Tarjeta("Vehículos registrados");
+        _cboEstado.Anchor = AnchorStyles.Left;
+        tarjetaLista.Controls.Add(ContenedorLista(filtros, _grilla, _lblVacio, _paginador));
+
+        if (puedeRegistrar)
+        {
+            Controls.Add(DosColumnas(tarjetaRegistro, tarjetaLista));
+        }
+        else
+        {
+            tarjetaRegistro.Dispose();
+            Controls.Add(tarjetaLista);
+            Controls.Add(new Label
+            {
+                Dock = DockStyle.Top, AutoSize = true, Font = Estilo.Normal,
+                BackColor = Color.FromArgb(232, 240, 248), ForeColor = Estilo.Primario,
+                Padding = new Padding(10, 8, 10, 8),
+                Text = $"ℹ  Su rol ({api.Usuario?.Rol}) permite únicamente consultar el catálogo de vehículos."
+            });
+        }
+
+        // ---- Caracteres permitidos al escribir o pegar
+        Restricciones.Filtrar(_txtMarca, Restricciones.CaracterMarca);
+        Restricciones.Filtrar(_txtModelo, Restricciones.CaracterModelo);
+        Restricciones.Filtrar(_txtPlaca, Restricciones.CaracterPlaca);
+        Restricciones.Filtrar(_txtChasis, Restricciones.CaracterChasis);
+        Restricciones.Filtrar(_txtColor, Restricciones.EsLetraOEspacio);
+        Restricciones.Filtrar(_txtFiltroMarca, Restricciones.CaracterMarca);
+        _txtFiltroMarca.MaxLength = 50;
+
+        // ---- Eventos
+        _txtChasis.TextChanged += (_, _) =>
+        {
+            int n = _txtChasis.Text.Trim().Length;
+            _lblChasis.Text = $"{n} / 17 caracteres";
+            _lblChasis.ForeColor = n == 17 ? Estilo.Exito : Estilo.TextoSuave;
+        };
+        _btnGuardar.Click += async (_, _) => await GuardarAsync();
+        _btnLimpiar.Click += (_, _) => LimpiarFormulario();
+        _btnBuscar.Click += async (_, _) => await BuscarAsync();
+        _btnLimpiarFiltro.Click += async (_, _) =>
+        {
+            _txtFiltroMarca.Clear();
+            _cboEstado.SelectedIndex = 0;
+            await BuscarAsync();
+        };
+        _txtFiltroMarca.KeyDown += async (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; await BuscarAsync(); }
+        };
+        _paginador.Cambio += (_, _) => MostrarPagina(seleccionarId: null);
+    }
+
+    public override async Task RecargarAsync() => await CargarListaAsync(seleccionarId: null);
+
+    /// <summary>Nueva búsqueda: vuelve a la primera página.</summary>
+    private async Task BuscarAsync()
+    {
+        _paginador.Reiniciar();
+        await CargarListaAsync(seleccionarId: null);
+    }
+
+    private async Task CargarListaAsync(int? seleccionarId)
+    {
+        string? estado = _cboEstado.SelectedIndex == 0 ? null : _cboEstado.Text;
+        Ui.Ocupado(true, "Consultando vehículos...");
+        _btnBuscar.Enabled = false;
+
+        var r = await Api.ListarVehiculosAsync(_txtFiltroMarca.Text, estado);
+
+        _btnBuscar.Enabled = true;
+        Ui.Ocupado(false);
+
+        if (!r.Exito)
+        {
+            _lista = new();
+            _paginador.Actualizar(0);
+            _grilla.DataSource = null;
+            MostrarVacio(_lblVacio, _grilla, true, "No se pudo obtener el listado.\n" + r.Mensaje);
+            Ui.MostrarError(r, "consultar vehículos");
+            return;
+        }
+
+        _lista = r.Datos!;
+        _paginador.Actualizar(_lista.Count);
+        if (seleccionarId is not null)
+        {
+            // Ir a la página donde quedó el vehículo recién registrado.
+            _paginador.MostrarIndice(_lista.FindIndex(v => v.IdVehiculo == seleccionarId));
+        }
+        MostrarPagina(seleccionarId);
+        MostrarVacio(_lblVacio, _grilla, _lista.Count == 0,
+            "No hay vehículos que coincidan con los filtros.");
+        Ui.Mostrar($"Vehículos consultados: {_lista.Count} (GET /api/vehiculos).", TipoMensaje.Exito, r.CodigoHttp);
+    }
+
+    /// <summary>Muestra en la tabla solo los vehículos de la página actual.</summary>
+    private void MostrarPagina(int? seleccionarId)
+    {
+        _grilla.DataSource = _lista.Skip(_paginador.Offset).Take(_paginador.Tamano).ToList();
+        _grilla.ClearSelection();
+        if (seleccionarId is null) return;
+        foreach (DataGridViewRow fila in _grilla.Rows)
+        {
+            if (fila.DataBoundItem is Vehiculo v && v.IdVehiculo == seleccionarId)
+            {
+                fila.Selected = true;
+                _grilla.FirstDisplayedScrollingRowIndex = fila.Index;
+                break;
+            }
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        // Validación de forma (ayuda al usuario); las reglas de negocio las aplica la API.
+        string marca = Restricciones.Normalizar(_txtMarca.Text);
+        string modelo = Restricciones.Normalizar(_txtModelo.Text);
+        string placa = _txtPlaca.Text.Trim().ToUpperInvariant();
+        string chasis = _txtChasis.Text.Trim().ToUpperInvariant();
+        string color = Restricciones.Normalizar(_txtColor.Text);
+
+        if (!ValidarFormulario(
+                (_txtMarca, marca.Length == 0, "Marca: es obligatoria."),
+                (_txtMarca, marca.Length < 2, "Marca: debe tener al menos 2 letras."),
+                (_txtMarca, !Restricciones.Marca().IsMatch(marca), "Marca: solo letras (con tildes), espacios y guion; no puede empezar ni terminar en guion."),
+                (_txtModelo, modelo.Length == 0, "Modelo: es obligatorio."),
+                (_txtModelo, !Restricciones.Modelo().IsMatch(modelo), "Modelo: solo letras, números, espacios, punto o guion; no puede empezar ni terminar en un símbolo."),
+                (_txtPlaca, placa.Length == 0, "Placa: es obligatoria."),
+                (_txtPlaca, !Restricciones.Placa().IsMatch(placa), "Placa: 3 letras seguidas de 3 o 4 números, sin guion (ej.: PBA1234)."),
+                (_txtChasis, chasis.Length != 17, $"Chasis: debe tener exactamente 17 caracteres (tiene {chasis.Length})."),
+                (_txtChasis, !Restricciones.Chasis().IsMatch(chasis), "Chasis: solo letras y números, sin las letras I, O ni Q."),
+                (_txtColor, color.Length == 0, "Color: es obligatorio."),
+                (_txtColor, color.Length < 3, "Color: debe tener al menos 3 letras."),
+                (_txtColor, !Restricciones.Color().IsMatch(color), "Color: solo letras (con tildes) y espacios."),
+                (_numPrecio, _numPrecio.Value <= 0, "Precio: debe ser mayor que 0.")))
+        {
+            return;
+        }
+
+        var nuevo = new VehiculoNuevo
+        {
+            Marca = marca,
+            Modelo = modelo,
+            Placa = placa,
+            Chasis = chasis,
+            Anio = (int)_numAnio.Value,
+            Color = color,
+            Precio = _numPrecio.Value
+        };
+
+        _btnGuardar.Enabled = false;
+        Ui.Ocupado(true, "Registrando vehículo...");
+        var r = await Api.CrearVehiculoAsync(nuevo);
+        Ui.Ocupado(false);
+        _btnGuardar.Enabled = true;
+
+        if (!r.Exito)
+        {
+            Ui.MostrarError(r, "registrar el vehículo", dialogo: true);
+            return;
+        }
+
+        var v = r.Datos!;
+        Ui.Mostrar($"Vehículo #{v.IdVehiculo} {v.Marca} {v.Modelo} ({v.Placa}) registrado.", TipoMensaje.Exito, r.CodigoHttp);
+        MessageBox.Show(this,
+            $"Vehículo registrado correctamente (HTTP {r.CodigoHttp}).\n\n" +
+            $"ID: {v.IdVehiculo}\nVehículo: {v.Marca} {v.Modelo}\nPlaca: {v.Placa}\n" +
+            $"Precio: {v.Precio:N2} USD\nEstado: {v.Estado}",
+            "Registro exitoso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        LimpiarFormulario();
+        _txtFiltroMarca.Clear();
+        _cboEstado.SelectedIndex = 0;
+        await CargarListaAsync(seleccionarId: v.IdVehiculo);
+    }
+
+    private void LimpiarFormulario()
+    {
+        foreach (var t in new[] { _txtMarca, _txtModelo, _txtPlaca, _txtChasis, _txtColor }) t.Clear();
+        _numAnio.Value = DateTime.Now.Year;
+        _numPrecio.Value = 0;
+        Errores.Clear();
+        _txtMarca.Focus();
+    }
+
+    private void ColorearEstado(object? sender, DataGridViewCellFormattingEventArgs e)
+    {
+        if (_grilla.Columns[e.ColumnIndex].DataPropertyName != nameof(Vehiculo.Estado) || e.Value is not string estado) return;
+        e.CellStyle!.ForeColor = estado switch
+        {
+            "DISPONIBLE" => Estilo.Exito,
+            "RESERVADO" => Estilo.Aviso,
+            "VENDIDO" => Estilo.Error,
+            _ => e.CellStyle.ForeColor
+        };
+        e.CellStyle.Font = Estilo.Negrita;
+    }
+}
