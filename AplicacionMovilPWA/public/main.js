@@ -229,7 +229,10 @@ function salir(mensaje = 'Sesión cerrada.', tipo = 'neutro') {
   campoUsuario.focus();
 }
 
-botonSalir.addEventListener('click', () => salir('Sesión cerrada. El token fue eliminado.'));
+botonSalir.addEventListener('click', () => {
+  if (!window.confirm('¿Desea cerrar la sesión?')) return;
+  salir('Sesión cerrada. El token fue eliminado.');
+});
 
 // ---------------------------------------------------------------- Pestañas
 function mostrarPestana(nombre) {
