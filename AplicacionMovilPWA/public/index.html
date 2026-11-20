@@ -133,6 +133,12 @@
               <button id="recargar-ventas" class="boton-discreto boton-pequeno" type="button">↻ Actualizar</button>
             </div>
             <p class="ayuda">Últimas ventas registradas por su usuario. Toque una para consultar su estado actual (<code>GET /api/ventas/{id}</code>).</p>
+            <form id="form-buscar-venta" class="buscador" novalidate>
+              <label for="buscar-venta" class="oculto">ID de venta</label>
+              <input id="buscar-venta" type="number" inputmode="numeric" min="1" step="1" placeholder="Buscar por ID de venta (ej.: 20)" autocomplete="off" />
+              <button id="boton-buscar-venta" class="boton-primario" type="submit">Buscar</button>
+              <button id="limpiar-busqueda" class="boton-discreto" type="button" hidden>Ver todas</button>
+            </form>
             <div id="mensaje-historial" class="mensaje neutro" role="status" aria-live="polite">—</div>
             <div id="ventas" class="vehiculos"></div>
           </section>

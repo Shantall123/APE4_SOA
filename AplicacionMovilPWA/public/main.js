@@ -526,6 +526,8 @@ botonNuevaVenta.addEventListener('click', () => {
 // ---------------------------------------------------------------- Mis ventas
 async function cargarHistorial() {
   if (!permisos.historial) return;
+  campoBuscarVenta.value = '';
+  botonLimpiarBusqueda.hidden = true;
   contenedorVentas.replaceChildren();
   mostrarMensaje(mensajeHistorial, 'Consultando ventas…');
   try {
@@ -579,6 +581,51 @@ function tarjetaVenta(venta) {
 }
 
 $('#recargar-ventas').addEventListener('click', cargarHistorial);
+
+// ---------------------------------------------------------------- Búsqueda por ID
+const campoBuscarVenta = $('#buscar-venta');
+const botonBuscarVenta = $('#boton-buscar-venta');
+const botonLimpiarBusqueda = $('#limpiar-busqueda');
+
+/**
+ * Busca una venta por su ID en el servidor (GET /api/ventas/{id}), no solo
+ * entre las ventas cargadas: así se encuentran también las más antiguas.
+ */
+$('#form-buscar-venta').addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  if (!permisos.historial) return;
+
+  const texto = campoBuscarVenta.value.trim();
+  const id = Number(texto);
+  if (!texto || !Number.isInteger(id) || id <= 0) {
+    mostrarMensaje(mensajeHistorial, 'Ingrese un ID de venta válido (número entero mayor que 0).', 'error');
+    campoBuscarVenta.focus();
+    return;
+  }
+
+  botonBuscarVenta.disabled = true;
+  contenedorVentas.replaceChildren();
+  mostrarMensaje(mensajeHistorial, `Buscando la venta #${id}…`);
+  try {
+    const r = await consultarVenta(sesion.token, id);
+    contenedorVentas.append(tarjetaVenta(r.venta));
+    mostrarMensaje(mensajeHistorial, `HTTP ${r.codigoHttp}: venta #${id} encontrada.`, 'exito');
+  } catch (error) {
+    if (error instanceof ErrorApi && error.codigoHttp === 404) {
+      mostrarMensaje(mensajeHistorial, `HTTP 404: no existe una venta con ID ${id}.`, 'error');
+    } else if (error instanceof ErrorApi && error.codigoHttp === 403) {
+      mostrarMensaje(mensajeHistorial, `HTTP 403: la venta #${id} no pertenece a su usuario.`, 'error');
+    } else {
+      manejarError(error, mensajeHistorial);
+    }
+    contenedorVentas.append(crearElemento('div', 'vacio', 'Sin resultados para la búsqueda.'));
+  } finally {
+    botonBuscarVenta.disabled = false;
+    botonLimpiarBusqueda.hidden = false;
+  }
+});
+
+botonLimpiarBusqueda.addEventListener('click', cargarHistorial);
 
 // ---------------------------------------------------------------- Inicio
 function actualizarConexion() {

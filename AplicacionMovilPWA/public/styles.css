@@ -105,3 +105,9 @@ input[type="search"] { margin-bottom: 12px; }
 .http.aviso { background: #fff4dc; color: #8a5a00; }
 .http.error { background: #fff0ee; color: #9a2f2f; }
 @media (max-width: 390px) { .resumen > div { flex-direction: column; gap: 2px; } .resumen dd { text-align: left; } }
+
+/* Buscador de "Mis ventas" por ID */
+.buscador { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+.buscador input { flex: 1 1 180px; }
+.buscador .boton-primario { flex: 0 0 auto; }
+.oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
