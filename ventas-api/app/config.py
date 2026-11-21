@@ -21,8 +21,7 @@ def requerido(nombre):
 
 def url_servicio(nombre):
 
-    # httpx exige el esquema; sin "http://" la llamada falla y la
-    # notificación de venta quedaba siempre PENDIENTE sin aviso.
+    # httpx exige el esquema; sin "http://" la llamada falla.
     valor = requerido(nombre).strip().rstrip("/")
 
     if not valor.lower().startswith(("http://", "https://")):
@@ -36,14 +35,21 @@ JAVA_URL = url_servicio("JAVA_URL")
 
 SERVICE_KEY = requerido("VENTAS_SERVICE_KEY")
 
-NOTIF_URL = url_servicio("NOTIFICACIONES_URL")
-
-NOTIF_KEY = requerido("NOTIFICACIONES_KEY")
-
-if min(len(SERVICE_KEY), len(NOTIF_KEY)) < 32:
+if len(SERVICE_KEY) < 32:
 
     raise RuntimeError("Claves de servicio de al menos 32 caracteres")
 
-if SERVICE_KEY.startswith("COLOCA_") or NOTIF_KEY.startswith("COLOCA_"):
+if SERVICE_KEY.startswith("COLOCA_"):
 
     raise RuntimeError("Reemplaza las claves de ejemplo en el archivo .env")
+
+# RabbitMQ (Actividad 8): la venta confirmada se notifica publicando un
+# evento persistente en una cola durable; el servicio de notificaciones lo
+# consume (Actividad 9). Ya no hay POST HTTP directo a notificaciones.
+RABBIT_URL = requerido("RABBITMQ_URL")
+
+RABBIT_EXCHANGE = os.environ.get("RABBITMQ_EXCHANGE", "ventas.eventos")
+
+RABBIT_COLA = os.environ.get("RABBITMQ_COLA", "notificaciones.ventas")
+
+RABBIT_ROUTING_KEY = os.environ.get("RABBITMQ_ROUTING_KEY", "venta.completada")
