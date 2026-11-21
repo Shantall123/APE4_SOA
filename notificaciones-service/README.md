@@ -5,7 +5,7 @@ Servicio de notificaciones de la arquitectura. Recibe avisos por dos vías:
 - **RabbitMQ (ventas):** un listener real consume la cola durable `notificaciones.ventas`, donde ventas-api (FastAPI) publica el evento `VENTA_COMPLETADA` de cada venta confirmada. Cada aviso se guarda **una sola vez por `eventoId`** en la tabla `notificaciones`.
 - **HTTP REST (vehículos):** la API Java de vehículos envía avisos `REGISTRO`, `ACTUALIZACION` y `ELIMINACION` a `POST /api/notificaciones`, que se muestran en la consola. Esas peticiones deben incluir la cabecera `X-Notification-Key`.
 
-> La consulta `GET /api/notificaciones` para JavaFX se agrega en la siguiente parte de la Actividad 9.
+Además expone `GET /api/notificaciones`, el historial de avisos de venta que consulta el cliente JavaFX a través de NGINX.
 
 ## Requisitos
 
@@ -127,7 +127,45 @@ SELECT id, evento_id, venta_id, vehiculo_id, precio_acordado, moneda, fecha_vent
 FROM notificaciones ORDER BY id DESC;
 ```
 
-## 6. Comprobación con Postman (avisos de vehículos)
+## 6. Consulta para JavaFX: `GET /api/notificaciones`
+
+Historial de solo lectura, del más reciente al más antiguo. JavaFX lo consulta a través de NGINX (`http://127.0.0.1:8090/api/notificaciones`); nunca accede a RabbitMQ ni a MySQL.
+
+```http
+GET http://127.0.0.1:8090/api/notificaciones?limite=50
+```
+
+```json
+{
+  "total": 1,
+  "notificaciones": [
+    {
+      "id": 4,
+      "eventoId": "d570fd0b-7a06-553b-b830-186ed31929da",
+      "tipo": "VENTA_COMPLETADA",
+      "ventaId": 30,
+      "vehiculoId": 42,
+      "precioAcordado": 10500.00,
+      "moneda": "USD",
+      "fechaVentaUTC": "2026-11-21T15:16:49Z",
+      "mensaje": "Venta 30 completada: vehículo 42, 10500.00 USD",
+      "recibidaEnUTC": "2026-11-21T15:16:52Z"
+    }
+  ]
+}
+```
+
+| Caso | HTTP |
+|---|---|
+| Hay avisos | 200 con la lista |
+| Todavía no hay avisos | 200 con `"total": 0` y `"notificaciones": []` (no es un error) |
+| `limite` fuera de 1–200 o no numérico | 400 |
+| MySQL no disponible | 503 |
+| Servicio apagado (vía NGINX) | 502 |
+
+`NotificacionKeyFilter` deja pasar **solo** `GET /api/notificaciones` sin `X-Notification-Key`: es una consulta de solo lectura y una aplicación de escritorio no debe guardar la clave de servicio. Registrar avisos (`POST`) sigue exigiendo la clave (401 sin ella).
+
+## 7. Comprobación con Postman (avisos de vehículos)
 
 ```http
 POST http://127.0.0.1:8082/api/notificaciones
@@ -160,6 +198,7 @@ En la consola del servicio aparece el bloque `NOTIFICACIÓN RECIBIDA` con el veh
 
 | Caso | HTTP |
 |---|---|
+| `GET /api/notificaciones` (sin clave) | 200 |
 | Notificación válida | 201 |
 | Falta `X-Notification-Key` o la clave es incorrecta | 401 `Clave no valida` |
 | `vehiculoId` ausente o menor o igual a 0 | 400 |
@@ -172,13 +211,14 @@ En la consola del servicio aparece el bloque `NOTIFICACIÓN RECIBIDA` con el veh
 ```text
 src/main/java/ec/edu/uta/notificaciones/
   config/       RabbitConfig (exchange, cola durable, binding y confirmación manual)
-  controller/   NotificacionController (POST /api/notificaciones)
-  dto/          NotificacionRequest, NotificacionResponse, EventoVenta (mensaje RabbitMQ)
-  exception/    ApiExceptionHandler (errores 400)
+  controller/   NotificacionController (POST y GET /api/notificaciones)
+  dto/          NotificacionRequest, NotificacionResponse, EventoVenta (mensaje RabbitMQ),
+                NotificacionDto, ListadoNotificaciones (respuesta para JavaFX)
+  exception/    ApiExceptionHandler (errores 400 y 503)
   messaging/    EventoVentaListener (@RabbitListener), EventoInvalidoException
   model/        Notificacion (entidad de la tabla notificaciones)
   repository/   NotificacionRepository (existsByEventoId)
-  security/     NotificacionKeyFilter (X-Notification-Key)
-  service/      NotificacionService (avisos REST), NotificacionVentaService (registro sin duplicados)
+  security/     NotificacionKeyFilter (X-Notification-Key en POST; GET libre para JavaFX)
+  service/      NotificacionService (avisos REST), NotificacionVentaService (registro sin duplicados e historial)
 db/notificaciones.sql   Script de la tabla notificaciones
 ```

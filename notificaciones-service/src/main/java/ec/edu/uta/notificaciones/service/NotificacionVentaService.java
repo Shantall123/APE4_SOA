@@ -1,10 +1,14 @@
 package ec.edu.uta.notificaciones.service;
 
 import ec.edu.uta.notificaciones.dto.EventoVenta;
+import ec.edu.uta.notificaciones.dto.ListadoNotificaciones;
+import ec.edu.uta.notificaciones.dto.NotificacionDto;
 import ec.edu.uta.notificaciones.messaging.EventoInvalidoException;
 import ec.edu.uta.notificaciones.model.Notificacion;
 import ec.edu.uta.notificaciones.repository.NotificacionRepository;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -17,6 +21,8 @@ import java.time.format.DateTimeParseException;
 public class NotificacionVentaService {
 
     public static final String TIPO_VENTA_COMPLETADA = "VENTA_COMPLETADA";
+
+    public static final int LIMITE_MAXIMO = 200;
 
     public enum Resultado { REGISTRADA, DUPLICADA }
 
@@ -80,6 +86,19 @@ public class NotificacionVentaService {
             throw ex;
         }
         return Resultado.REGISTRADA;
+    }
+
+    /**
+     * Historial recuperable para JavaFX: los `limite` avisos más recientes
+     * (id descendente) y el total registrado en la tabla.
+     */
+    public ListadoNotificaciones listar(int limite) {
+        if (limite < 1 || limite > LIMITE_MAXIMO) {
+            throw new IllegalArgumentException("limite debe estar entre 1 y " + LIMITE_MAXIMO);
+        }
+        var pagina = repositorio.findAll(PageRequest.of(0, limite, Sort.by(Sort.Direction.DESC, "id")));
+        return new ListadoNotificaciones(pagina.getTotalElements(),
+                pagina.getContent().stream().map(NotificacionDto::de).toList());
     }
 
     static String mensaje(EventoVenta e) {
