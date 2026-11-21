@@ -1,14 +1,12 @@
 import hashlib
 
-import logging
-
 import json
 
 from uuid import uuid4
 
 from decimal import Decimal
 
-import httpx
+from pika.exceptions import AMQPError
 
 from sqlalchemy.exc import IntegrityError
 
@@ -18,7 +16,8 @@ from app.models import Venta, Comprador
 from app.repositories.venta_repository import VentaRepository
 from app.clients.vehiculos_client import VehiculosClient, FalloRemoto
 
-from app.config import NOTIF_URL, NOTIF_KEY
+from app.messaging.publicador import publicar_venta
+from app.messaging.topologia import destino, log as log_eventos
 from app.errors import ApiError
 from app.security import propietario
 
@@ -228,7 +227,12 @@ def procesar(id):
 
 
 def notificar(id):
+    """Publica en RabbitMQ el evento de una venta COMPLETADA, una sola vez.
 
+    notificacion=ENVIADA  -> RabbitMQ confirmó que guardó el mensaje.
+    notificacion=PENDIENTE -> RabbitMQ no disponible; el worker lo reintenta.
+    Un reintento con la misma Idempotency-Key encuentra ENVIADA y no publica.
+    """
     with SessionLocal.begin() as db:
 
         v = VentaRepository(db).bloquear(id)
@@ -239,31 +243,18 @@ def notificar(id):
 
         try:
 
-            r = httpx.post(NOTIF_URL + "/api/notificaciones", timeout=3,
+            evento = publicar_venta(v)
 
-                           headers={"X-Notification-Key": NOTIF_KEY}, json={
+            v.notificacion = "ENVIADA"
 
-                               "vehiculoId": v.vehiculo_id, "tipo": "VENTA",
+            log_eventos.info("Evento %s publicado: tipo=%s ventaId=%s "
+                             "vehiculoId=%s", evento["eventoId"],
+                             evento["tipo"], v.id, v.vehiculo_id)
 
-                               "destinatario": v.comprador.correo,
-
-                               "mensaje": f"Venta {v.id} operación {v.operacion_id} completada",
-                           })
-
-            if 200 <= r.status_code < 300:
-
-                v.notificacion = "ENVIADA"
-
-            else:
-
-                v.notificacion = "PENDIENTE"
-
-                logging.warning("Notificación de venta %s rechazada: HTTP %s %s",
-                                v.id, r.status_code, r.text[:200])
-
-        except httpx.RequestError as ex:
+        except (AMQPError, OSError) as ex:
 
             v.notificacion = "PENDIENTE"
 
-            logging.warning("Notificación de venta %s no enviada (%s): %s",
-                            v.id, type(ex).__name__, ex)
+            log_eventos.warning("RabbitMQ no disponible en %s (%s): el evento "
+                                "de la venta %s queda PENDIENTE para el worker",
+                                destino(), type(ex).__name__, v.id)

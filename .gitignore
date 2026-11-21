@@ -135,3 +135,6 @@ $RECYCLE.BIN/
 *.sqlite3
 *.db
 *.dump
+
+# Configuración local del cliente Windows Forms (contiene el client-secret)
+**/WinFormsAdministrativo/appsettings.json

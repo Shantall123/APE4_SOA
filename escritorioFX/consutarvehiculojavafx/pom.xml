@@ -62,8 +62,8 @@
                     <execution>
                         <id>default-cli</id>
                         <configuration>
-                            <!-- Asegúrate de que esta clase exista en tu carpeta src/main/java -->
-                            <mainClass>ec.edu.com.VehiculosApp</mainClass>
+                            <!-- Visor de notificaciones de venta (Actividad 9) -->
+                            <mainClass>ec.edu.com.NotificacionesApp</mainClass>
                         </configuration>
                     </execution>
                 </executions>

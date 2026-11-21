@@ -1,90 +1,98 @@
-# PWA móvil – Consulta de vehículos
+# PWA móvil – Login y registro de ventas
 
-Aplicación web progresiva (PWA) en HTML, CSS y JavaScript nativo, adaptada a móvil. Consulta `GET /api/vehiculos` de la API Java con un JWT. Incluye:
+Aplicación web progresiva (HTML, CSS y JavaScript nativo) adaptada a móvil. Es el **único cliente que registra ventas** de la arquitectura:
 
-- **Manifiesto e íconos** (192 y 512 px) para instalarla.
-- **Service Worker** que guarda en caché solo los archivos estáticos, no las respuestas con JWT.
-- **Servidor Node sin dependencias** (`server.mjs`) que sirve la aplicación y reenvía `GET /api/vehiculos` a Spring Boot desde el mismo origen, para evitar CORS.
+1. **Login** con usuario y contraseña → `POST /oauth/token` a través de NGINX. El JWT se emite para esa cuenta; no se pega a mano.
+2. **Selección** de un vehículo `DISPONIBLE` (`GET /api/vehiculos?estado=DISPONIBLE`) y de un comprador (`GET /api/compradores`).
+3. **Registro** con `POST /api/ventas`, enviando `Authorization: Bearer <JWT>` e `Idempotency-Key`.
+4. **Resultado real**: código HTTP (201, 200, 202, 403, 409…), estado de la venta y mensaje. Se puede consultar después con `GET /api/ventas/{id}`.
+5. **Mis ventas**: historial del usuario (`GET /api/ventas`) con consulta de estado de cada venta.
 
-> La guía APE 04 prevé que la PWA tenga login (`POST /oauth/token`) y sea el único cliente que registra ventas (`POST /api/ventas`). Esa parte todavía no está implementada. Hoy el servidor solo permite `GET /api/vehiculos` y responde 404 a cualquier otra ruta `/api/*`.
+## Arquitectura
+
+```text
+Navegador (PWA) ──► server.mjs (mismo origen, :5174) ──► NGINX :8090 ──► API Java (8080/8083) / FastAPI (8000)
+```
+
+- `server.mjs` sirve los archivos y actúa como **proxy con lista blanca**. Solo reenvía `POST /oauth/token`, `GET /api/identidad`, `GET /api/vehiculos`, `GET /api/compradores`, `GET /api/ventas`, `GET /api/ventas/{id}` y `POST /api/ventas`. Cualquier otra ruta responde 404.
+- Las credenciales del **cliente OAuth** (`client-id` y `client-secret`) viven solo en el servidor (`.env`). El navegador envía únicamente usuario y contraseña, y recibe solo el `access_token`, sin el `refresh_token`.
+- El **JWT** se guarda en `sessionStorage` solo durante la sesión. Se borra al cerrar sesión, al vencer o ante un HTTP 401. Nunca va al código, a `localStorage` ni a la caché del Service Worker.
+- La **Idempotency-Key** se genera por venta (`venta-<uuid>`). Si no llega confirmación (sin red, 502, 503 o 504), la clave se conserva y el botón **"Verificar / reintentar sin duplicar"** reenvía la misma solicitud con la misma clave: FastAPI devuelve la venta existente (200) en lugar de crear otra.
 
 ## Requisitos
 
 | Software | Versión |
 |---|---|
-| Node.js | 20 o superior (probado con 22) |
-| API Java de vehículos | En ejecución en `http://127.0.0.1:8081` |
+| Node.js | 20.12 o superior (probado con 22) |
+| NGINX | En 8090, con las rutas de la Actividad 3 |
+| API Java, FastAPI y MySQL | En ejecución |
 
 No necesita `npm install`: el proyecto no tiene dependencias externas.
 
 ## 1. Configuración
 
-El servidor se configura con variables de entorno:
+Copia `.env.example` como `.env` en esta carpeta y completa los valores. El archivo `.env` está excluido de Git.
 
-| Variable | Valor por defecto | Uso |
-|---|---|---|
-| `PORT` | `5173` | Puerto de la PWA |
-| `HOST` | `127.0.0.1` | Interfaz de escucha (`0.0.0.0` para abrirla desde el celular en la misma red) |
-| `API_BASE_URL` | `http://127.0.0.1:8081` | API Java (o NGINX: `http://127.0.0.1:8090`) |
-
-Ejemplo en PowerShell, para usar el puerto 5174 y no chocar con React en el 5173:
-
-```powershell
-$env:PORT = "5174"
-$env:API_BASE_URL = "http://127.0.0.1:8081"
+```dotenv
+API_BASE_URL=http://127.0.0.1:8090
+OAUTH_CLIENT_ID=vehiculos-client
+OAUTH_CLIENT_SECRET=<app.security.client-secret de la API Java>
+PORT=5174
+HOST=127.0.0.1
 ```
 
-## 2. Ejecución en desarrollo
+## 2. Ejecución
 
 ```powershell
 cd AplicacionMovilPWA
-npm start          # equivale a: node server.mjs
+npm start
 ```
 
-Abre `http://localhost:5173`, o el puerto indicado en `PORT`. En la consola aparece el proxy activo.
+Abre `http://localhost:5174`.
 
-## 3. Pruebas
+Para probar desde el celular en la misma red, usa `HOST=0.0.0.0`. Para **instalar** la PWA se necesita un origen seguro (`localhost` o HTTPS).
+
+## 3. Pruebas automáticas
 
 ```powershell
 npm test
 ```
 
-Ejecuta las 7 pruebas de `tests/` (cliente y servidor) con el runner nativo de Node.
+Son 19 pruebas: el cliente HTTP (login, Idempotency-Key, 401, 409 y 504) y el proxy (inyección de Basic, filtrado del `refresh_token`, reenvío de `Idempotency-Key`, lista blanca y backend caído).
 
-## 4. Compilación y vista previa
+## 4. Compilación
 
 ```powershell
 npm run build      # copia public/ en dist/
 npm run preview    # sirve dist/ en http://localhost:4173 con el mismo proxy
 ```
 
-Para instalar la PWA en un celular se necesita un origen seguro: `localhost` o HTTPS. Desde otra máquina de la red local, publícala detrás de HTTPS, por ejemplo con NGINX.
+## Respuestas de POST /api/ventas
 
-## 5. Uso
-
-1. Obtén un JWT con `POST http://127.0.0.1:8081/oauth/token` desde Postman.
-2. Pégalo en **Token de usuario**. Se acepta con o sin `Bearer`.
-3. Pulsa **Consultar vehículos**: se listan las tarjetas de vehículos con su precio en USD. **Borrar token** limpia el campo.
-
-| Respuesta | Mensaje |
+| HTTP | Significado en la PWA |
 |---|---|
-| 401 | "JWT ausente, inválido o vencido" |
-| 403 | "el usuario no tiene permiso" |
-| API apagada | 502: "no se pudo establecer conexión con Spring Boot" |
-| Tiempo agotado (12 s) | 504 |
+| 201 | Venta registrada y COMPLETADA |
+| 200 | Reintento con la misma Idempotency-Key: se devuelve la venta existente, sin duplicado |
+| 202 | Venta recibida en PENDIENTE o EN_REVISION: consultar su estado |
+| 401 | Token ausente o vencido: vuelve al login |
+| 403 | El rol no permite vender (se requiere OPERADOR o ADMIN) |
+| 404 | Comprador inexistente |
+| 409 | Vehículo no disponible o conflicto |
+| 422 | Datos inválidos o falta la Idempotency-Key |
+| 502 / 503 / 504 / sin red | Resultado incierto: verificar con la misma clave |
 
 ## Estructura
 
 ```text
-server.mjs                Servidor estático + proxy GET /api/vehiculos
-scripts/build.mjs         Copia public/ a dist/
+server.mjs              Servidor estático + proxy con lista blanca y login con credenciales del cliente
+.env.example            Plantilla de configuración (sin secretos)
 public/
-  index.html              Interfaz móvil
-  main.js                 Lógica de la interfaz
-  api.js                  Cliente HTTP (normaliza el JWT e interpreta códigos)
-  sw.js                   Service Worker
-  manifest.webmanifest    Manifiesto PWA
-  styles.css, icons/      Estilos e íconos
-tests/                    Pruebas node:test
-docs/                     Guía práctica y pantalla de referencia
+  index.html            Vistas: login, nueva venta (3 pasos), resultado y "Mis ventas"
+  main.js               Lógica de la interfaz
+  api.js                Cliente HTTP (ErrorApi, Idempotency-Key, códigos HTTP)
+  sesion.js             JWT en sessionStorage y venta pendiente
+  sw.js                 Service Worker (solo recursos estáticos; nunca /api ni /oauth)
+  manifest.webmanifest  Manifiesto PWA
+  styles.css, icons/    Estilos adaptables e íconos 192/512
+tests/                  Pruebas node:test
 ```

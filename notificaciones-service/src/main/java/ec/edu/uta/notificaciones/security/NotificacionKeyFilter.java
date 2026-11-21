@@ -18,7 +18,19 @@ public class NotificacionKeyFilter extends OncePerRequestFilter{
         if(key.length()<32) throw new IllegalArgumentException("Clave no cumple los 32 crt");
         this.key=key;
     }
-     @Override
+    /**
+     * La consulta de JavaFX (GET /api/notificaciones) es de solo lectura y no
+     * lleva la clave de servicio: una aplicación de escritorio no debe guardar
+     * X-Notification-Key. Registrar avisos (POST) sigue exigiendo la clave.
+     */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest req) {
+        String ruta = req.getRequestURI().substring(req.getContextPath().length());
+        return "GET".equalsIgnoreCase(req.getMethod())
+                && (ruta.equals("/api/notificaciones") || ruta.startsWith("/api/notificaciones/"));
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest req,
     HttpServletResponse res, FilterChain chain)
     throws IOException, ServletException {
