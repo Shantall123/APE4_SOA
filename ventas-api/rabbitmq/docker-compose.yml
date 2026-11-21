@@ -1,0 +1,21 @@
+# Definición reproducible del broker usado en la Actividad 8.
+# Equivale al contenedor "rabbitmq-taller" del taller:
+#   docker compose -f rabbitmq/docker-compose.yml up -d
+# Panel de administración: http://127.0.0.1:15672 (usuario guest en desarrollo).
+#
+# El exchange, la cola durable y el binding NO se crean a mano: los declara
+# ventas-api al conectarse (app/messaging/topologia.py), de forma idempotente.
+services:
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: rabbitmq-taller
+    hostname: rabbitmq-taller   # nombre fijo: los mensajes persistentes sobreviven al recrear el contenedor
+    ports:
+      - "5672:5672"     # AMQP (FastAPI publica, el consumidor lee)
+      - "15672:15672"   # panel de administración (Ready / Unacked / Consumers)
+    volumes:
+      - rabbitmq-datos:/var/lib/rabbitmq   # cola y mensajes durables en disco
+    restart: unless-stopped
+
+volumes:
+  rabbitmq-datos:
